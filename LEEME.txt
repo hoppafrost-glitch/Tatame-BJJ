@@ -1,0 +1,45 @@
+TATAME · Control de alumnos
+===========================
+
+QUE ES
+Una app web que se instala en el movil y guarda los datos en el propio
+telefono. No hay servidor ni cuentas: lo que apunta el mestre se queda
+en su movil.
+
+COMO PONERLA EN MARCHA (una sola vez, lo haces tu)
+1. Sube TODOS los archivos de esta carpeta a un repositorio de GitHub.
+2. Settings -> Pages -> Deploy from a branch -> main / (root) -> Save.
+3. En un par de minutos tendras una URL tipo:
+   https://TUUSUARIO.github.io/TUREPO/
+
+COMO LA INSTALA EL (IPHONE)
+1. Le pasas esa URL por WhatsApp.
+2. La abre CON SAFARI (con Chrome de iOS no se puede instalar).
+3. Al entrar le sale solo un cartel con los tres pasos:
+   Compartir -> Anadir a pantalla de inicio -> Anadir.
+4. Ya tiene el icono. Se abre a pantalla completa y funciona sin
+   cobertura.
+
+IMPORTANTE: que instale el icono ANTES de empezar a meter alumnos.
+iOS le da a la app instalada su propio almacen, asi que lo que apunte
+en Safari antes de instalar no aparece luego dentro de la app.
+
+EN ANDROID
+Igual, pero le sale un boton "Instalar" arriba a la derecha.
+
+FOTOS
+Cada alumno puede llevar foto: dentro de su ficha, "Hacer foto" abre la
+camara y "Subir foto" coge una del carrete. La app la recorta en
+cuadrado y la reduce, asi ocupa poco (unos 25 KB por alumno).
+
+COPIAS DE SEGURIDAD
+Ajustes -> "Descargar copia (.json)". Que lo haga de vez en cuando y se
+lo mande a si mismo por WhatsApp o lo suba a Drive. Si borra los datos
+del navegador o cambia de movil, sin copia se pierde todo.
+Para restaurar: Ajustes -> "Restaurar desde copia".
+
+ARCHIVOS
+index.html        la app entera
+manifest.json     nombre, icono y modo pantalla completa
+sw.js             hace que funcione sin internet
+icon-*.png        iconos de la pantalla de inicio
