@@ -134,7 +134,7 @@ nav .badge{font-family:var(--m);font-size:.62rem;background:var(--amber);color:#
 .filtros button[aria-pressed="true"]{background:var(--canvas);color:var(--tatami);border-color:var(--canvas)}
 
 /* ---------- ficha (pantalla completa) ---------- */
-#sheet{position:fixed;inset:0;z-index:60;background:var(--tatami);overflow-y:auto;
+#sheet{position:fixed;inset:0;z-index:60;background:var(--tatami);color:var(--canvas);overflow-y:auto;
   display:none;padding:0 16px calc(30px + env(safe-area-inset-bottom))}
 #sheet.abierta{display:block}
 .sheet-bar{position:sticky;top:0;background:var(--tatami);z-index:5;
@@ -530,7 +530,7 @@ function abrirFicha(id){
       : `<span class="retrato ini" aria-hidden="true">${esc(iniciales(a.nombre))}</span>`}</span>
     <span class="acciones">
       <button class="btn mini" id="btnCamara">Hacer foto</button>
-      <button class="btn mini" id="btnGaleria">Subir foto</button>
+      <button class="btn mini" id="btnGaleria">Elegir del carrete</button>
       ${a.foto ? '<button class="btn mini peligro" id="btnQuitarFoto">Quitar foto</button>' : ''}
     </span>
   </div>
