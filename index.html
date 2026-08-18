@@ -185,6 +185,15 @@ nav .badge{font-family:var(--m);font-size:.62rem;background:var(--amber);color:#
   font-size:1.05rem;color:var(--amber);margin-bottom:6px}
 .rescate p{margin:0 0 13px;font-size:.88rem;color:var(--muted);line-height:1.45}
 
+/* ---------- escudo de fondo ---------- */
+#marca{
+  position:fixed;left:50%;top:52%;transform:translate(-50%,-50%);
+  width:min(80vw, 400px);aspect-ratio:1;z-index:0;pointer-events:none;
+  background:url('logo.png') center/contain no-repeat;
+  opacity:.19;
+}
+main{position:relative;z-index:1}
+
 /* ---------- resumen de tiempo en la ficha ---------- */
 .resumen{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:4px 14px}
 .fila-r{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
@@ -250,6 +259,7 @@ nav .badge{font-family:var(--m);font-size:.62rem;background:var(--amber);color:#
   <button id="instalar" class="btn mini primario" hidden style="margin-left:auto">Instalar</button>
 </header>
 
+<div id="marca" aria-hidden="true"></div>
 <main id="vista"></main>
 
 <button class="fab" id="fab" aria-label="Añadir alumno">+</button>
@@ -460,6 +470,7 @@ function pintar(){
   document.querySelectorAll('nav button').forEach(b =>
     b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
 
+  document.getElementById('marca').style.display = (tab === 'avisos') ? 'block' : 'none';
   if(tab === 'avisos')  v.innerHTML = vistaAvisos();
   if(tab === 'alumnos') v.innerHTML = vistaAlumnos();
   if(tab === 'ajustes') v.innerHTML = vistaAjustes();
@@ -596,7 +607,7 @@ function vistaAjustes(){
 
   <p class="nota-legal">Aquí hay datos personales de otras personas: pide su permiso, no metas nada
   que no necesites y guarda las copias en sitio seguro. Los menores necesitan permiso de padre, madre o tutor.</p>
-  <p class="nota-legal" style="text-align:center">Tatame · versión 17</p>`;
+  <p class="nota-legal" style="text-align:center">Tatame · versión 19</p>`;
 }
 
 function actualizaPrevia(){

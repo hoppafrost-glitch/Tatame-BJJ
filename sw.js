@@ -1,7 +1,7 @@
 /* Tatame · funciona sin cobertura y se actualiza sola */
 const CACHE = "tatame-v13";
 const ARCHIVOS = ['./', './index.html', './manifest.json',
-  './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable.png'];
+  './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './logo.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
