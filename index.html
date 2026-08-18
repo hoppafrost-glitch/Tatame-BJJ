@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TATAME · Control de alumnos</title>
+<meta name="theme-color" content="#16232C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tatame">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tatami:#16232C;      /* base: goma del tatami */
+  --surface:#1F303A;     /* tarjetas */
+  --surface-2:#27404C;
+  --line:#31505E;
+  --canvas:#EAE3D6;      /* algodón del kimono */
+  --muted:#93A7B2;
+  --amber:#F0A93B;       /* avisos / acción */
+  --alert:#E4573D;       /* vencido */
+  --ok:#4FA97C;
+  --w-blanco:#F2EEE4; --w-gris:#9AA3A8; --w-amarillo:#E8C22B; --w-naranja:#E0762A;
+  --w-verde:#2E9455; --w-azul:#1E5FBF; --w-morado:#6B3FA0; --w-marron:#6B4A2F; --w-negro:#101010;
+  --d:'Barlow Condensed',Impact,'Haettenschweiler','Arial Narrow',sans-serif;
+  --b:'Barlow','Segoe UI',system-ui,sans-serif;
+  --m:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--tatami);
+  background-image:linear-gradient(rgba(255,255,255,.017) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.017) 1px,transparent 1px);
+  background-size:22px 22px;
+  color:var(--canvas);font-family:var(--b);font-size:16px;line-height:1.45;
+  padding-bottom:calc(78px + env(safe-area-inset-bottom));
+  overscroll-behavior-y:contain;
+}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select,textarea{
+  font:inherit;width:100%;background:var(--tatami);color:var(--canvas);
+  border:1px solid var(--line);border-radius:6px;padding:11px 12px
+}
+textarea{min-height:84px;resize:vertical}
+label{display:block;font-family:var(--d);text-transform:uppercase;letter-spacing:.09em;
+  font-size:.82rem;color:var(--muted);margin:0 0 5px}
+
+/* ---------- cabecera ---------- */
+header{
+  position:sticky;top:0;z-index:30;background:rgba(22,35,44,.96);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+  display:flex;align-items:baseline;gap:10px
+}
+header h1{font-family:var(--d);font-size:1.5rem;font-weight:700;letter-spacing:.16em;margin:0;text-transform:uppercase}
+header .sub{font-family:var(--m);font-size:.7rem;color:var(--muted);letter-spacing:.04em}
+main{padding:16px 16px 4px;max-width:640px;margin:0 auto}
+.h2{font-family:var(--d);text-transform:uppercase;letter-spacing:.12em;font-size:1.05rem;
+  color:var(--muted);margin:22px 0 10px;display:flex;align-items:center;gap:10px}
+.h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.h2 .n{font-family:var(--m);font-size:.78rem;color:var(--tatami);background:var(--muted);
+  border-radius:99px;padding:1px 7px}
+
+/* ---------- faixa: la firma de la app ---------- */
+.faixa{display:flex;height:13px;border-radius:2px;overflow:hidden;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.45),0 1px 0 rgba(255,255,255,.05)}
+.faixa .cuerpo{flex:1}
+.faixa .punta{width:44px;display:flex;align-items:stretch;gap:4px;padding:0 6px;background:#0B0B0B}
+.faixa[data-f="negro"] .punta{background:#B0202A}
+.faixa .grau{width:4px;height:100%;background:#F7F3EA}
+.faixa.lg{height:17px}.faixa.lg .punta{width:56px}
+
+/* ---------- tarjetas de alumno ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:13px 14px;margin-bottom:10px;display:block;width:100%;text-align:left}
+.card:active{background:var(--surface-2)}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.card .nombre{font-family:var(--d);font-size:1.32rem;font-weight:700;letter-spacing:.02em;line-height:1.1}
+.card .meses{font-family:var(--m);font-size:1.5rem;font-weight:600;line-height:1;text-align:right}
+.card .meses small{display:block;font-size:.6rem;letter-spacing:.12em;color:var(--muted);
+  text-transform:uppercase;font-family:var(--d);margin-top:3px}
+.card .faixa{margin:11px 0 9px}
+.card .pie{display:flex;justify-content:space-between;gap:10px;font-size:.82rem;color:var(--muted);
+  font-family:var(--m);font-size:.74rem}
+.chip{display:inline-block;font-family:var(--d);text-transform:uppercase;letter-spacing:.09em;
+  font-size:.72rem;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.chip.prueba{color:var(--amber);border-color:var(--amber)}
+.chip.baja{color:var(--alert);border-color:var(--alert)}
+
+/* ---------- avisos ---------- */
+.aviso{display:flex;gap:12px;align-items:stretch;background:var(--surface);
+  border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:8px;
+  padding:12px 13px;margin-bottom:9px;width:100%;text-align:left}
+.aviso.rojo{border-left-color:var(--alert)}
+.aviso .txt{flex:1;min-width:0;text-align:left;padding:0}
+.aviso .tachar{flex:none;width:34px;color:var(--muted);font-size:1rem;align-self:center}
+.aviso .quien{display:block;font-family:var(--d);font-size:1.15rem;letter-spacing:.02em}
+.aviso .que{display:block;font-size:.88rem;color:var(--muted)}
+.aviso .ir{align-self:center;color:var(--muted);font-family:var(--m);font-size:1.1rem}
+
+/* ---------- barra inferior ---------- */
+nav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+  background:rgba(22,35,44,.97);backdrop-filter:blur(8px);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:11px 4px 13px;font-family:var(--d);text-transform:uppercase;
+  letter-spacing:.11em;font-size:.85rem;color:var(--muted);border-top:2px solid transparent}
+nav button[aria-current="true"]{color:var(--canvas);border-top-color:var(--amber)}
+nav .badge{font-family:var(--m);font-size:.62rem;background:var(--amber);color:#16232C;
+  border-radius:99px;padding:0 5px;margin-left:4px;vertical-align:top}
+
+/* ---------- botones ---------- */
+.btn{display:block;width:100%;text-align:center;padding:13px;border-radius:8px;
+  font-family:var(--d);text-transform:uppercase;letter-spacing:.11em;font-size:1rem;
+  color:var(--canvas);border:1px solid var(--line);background:var(--surface)}
+.btn.primario{background:var(--amber);color:#16232C;border-color:var(--amber);font-weight:700}
+.btn.peligro{color:var(--alert);border-color:var(--alert)}
+.btn.mini{width:auto;display:inline-block;padding:8px 14px;font-size:.85rem}
+.btn.contorno{background:transparent;border:2px solid var(--canvas);color:var(--canvas);font-weight:700}
+.fab{position:fixed;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:41;
+  width:56px;height:56px;border-radius:50%;background:var(--amber);color:#16232C;
+  font-size:2rem;line-height:1;display:grid;place-items:center;
+  box-shadow:0 6px 20px rgba(0,0,0,.45);font-weight:700}
+
+/* ---------- buscador / filtros ---------- */
+.buscador{position:relative;margin-bottom:10px}
+.filtros{display:flex;gap:7px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px}
+.filtros button{white-space:nowrap;font-family:var(--d);text-transform:uppercase;letter-spacing:.09em;
+  font-size:.8rem;padding:5px 12px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.filtros button[aria-pressed="true"]{background:var(--canvas);color:var(--tatami);border-color:var(--canvas)}
+
+/* ---------- ficha (pantalla completa) ---------- */
+#sheet{position:fixed;inset:0;z-index:60;background:var(--tatami);color:var(--canvas);overflow-y:auto;
+  display:none;padding:0 16px calc(30px + env(safe-area-inset-bottom))}
+#sheet.abierta{display:block}
+.sheet-bar{position:sticky;top:0;background:var(--tatami);z-index:5;
+  padding:calc(12px + env(safe-area-inset-top)) 0 12px;margin-bottom:6px;
+  display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.sheet-bar .t{font-family:var(--d);text-transform:uppercase;letter-spacing:.13em;font-size:1.1rem;color:var(--canvas)}
+.campo{margin-bottom:14px}
+.fila{display:flex;gap:10px}.fila>*{flex:1}
+.hito{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hito .marca{width:26px;height:26px;border-radius:5px;border:1px solid var(--line);
+  display:grid;place-items:center;flex:none;font-family:var(--m);font-size:.9rem}
+.hito.listo .marca{background:var(--ok);border-color:var(--ok);color:#0F1A14}
+.hito.tocado .marca{border-color:var(--acc,var(--amber));color:var(--acc,var(--amber))}
+.hito .info{flex:1}
+.hito .mes{font-family:var(--d);font-size:1.1rem;letter-spacing:.05em}
+.hito .est{font-family:var(--m);font-size:.72rem;color:var(--muted)}
+.nota{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.nota .cab{display:flex;justify-content:space-between;font-family:var(--m);font-size:.7rem;color:var(--muted);margin-bottom:4px}
+.nota p{margin:0;white-space:pre-wrap;font-size:.94rem}
+.vacio{text-align:center;color:var(--muted);padding:34px 12px;border:1px dashed var(--line);border-radius:10px}
+.vacio strong{display:block;font-family:var(--d);text-transform:uppercase;letter-spacing:.11em;
+  font-size:1.1rem;color:var(--canvas);margin-bottom:6px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom));
+  background:var(--canvas);color:var(--tatami);padding:9px 16px;border-radius:99px;z-index:80;
+  font-family:var(--d);text-transform:uppercase;letter-spacing:.09em;font-size:.85rem;
+  opacity:0;pointer-events:none;transition:opacity .18s}
+#toast.ver{opacity:1}
+.aparece{animation:sube .22s ease-out both}
+@keyframes sube{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.nota-legal{font-size:.78rem;color:var(--muted);line-height:1.5;margin-top:18px}
+
+.tramo{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.tramo .et{font-family:var(--d);text-transform:uppercase;letter-spacing:.09em;
+  font-size:.85rem;color:var(--muted);width:62px;flex:none}
+.tramo select{flex:1}
+.tramo select:last-child{flex:0 0 96px}
+
+.previa{background:var(--surface);border-left:3px solid var(--acc,var(--amber));
+  border-radius:0 6px 6px 0;padding:10px 12px;margin:4px 0 12px;font-size:.88rem;line-height:1.45}
+.previa b{font-family:var(--m);font-weight:600}
+.previa .mal{color:var(--alert)}
+
+/* ---------- resumen de tiempo en la ficha ---------- */
+.resumen{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:4px 14px}
+.fila-r{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--line)}
+.fila-r:last-child{border-bottom:0}
+.fila-r span{font-family:var(--d);text-transform:uppercase;letter-spacing:.09em;
+  font-size:.82rem;color:var(--muted)}
+.fila-r b{font-family:var(--m);font-size:1rem;font-weight:600;color:var(--canvas);white-space:nowrap}
+.fila-r .resta{color:var(--alert)}
+.fila-r.total{padding:12px 0 13px}
+.fila-r.total span{color:var(--canvas);font-size:.9rem}
+.fila-r.total b{font-size:1.7rem;line-height:1}
+.parado{margin-top:10px;border-left:3px solid var(--alert);border-radius:0 6px 6px 0;
+  padding:8px 11px;font-size:.85rem;color:var(--canvas);background:var(--surface)}
+
+/* ---------- fotos ---------- */
+.thumb{width:46px;height:46px;border-radius:8px;flex:none;object-fit:cover;
+  background:var(--surface-2);border:1px solid var(--line);display:block}
+.thumb.ini{display:grid;place-items:center;font-family:var(--d);font-size:1.15rem;
+  letter-spacing:.03em;color:var(--muted)}
+.retrato{width:96px;height:96px;border-radius:12px;object-fit:cover;flex:none;
+  background:var(--surface-2);border:1px solid var(--line);display:block}
+.retrato.ini{display:grid;place-items:center;font-family:var(--d);font-size:2.1rem;color:var(--muted)}
+.foto-fila{display:flex;gap:14px;align-items:center;margin:16px 0 20px}
+.foto-fila .acciones{flex:1;display:flex;flex-direction:column;gap:8px}
+.foto-fila .btn.mini{width:100%}
+
+/* ---------- cartel de instalación (iPhone) ---------- */
+#instala{position:fixed;inset:0;z-index:90;background:rgba(10,17,22,.93);
+  backdrop-filter:blur(4px);display:none;padding:22px 18px calc(18px + env(safe-area-inset-bottom));
+  overflow-y:auto}
+#instala.ver{display:flex;flex-direction:column;justify-content:center}
+#instala .caja{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  padding:22px 20px;max-width:420px;margin:0 auto;width:100%}
+#instala .faixa{margin-bottom:16px}
+#instala h2{font-family:var(--d);text-transform:uppercase;letter-spacing:.1em;
+  font-size:1.5rem;margin:0 0 4px;line-height:1.1}
+#instala .lead{color:var(--muted);font-size:.92rem;margin:0 0 18px}
+#instala ol{list-style:none;counter-reset:p;margin:0 0 18px;padding:0}
+#instala li{counter-increment:p;display:flex;gap:12px;align-items:flex-start;
+  padding:11px 0;border-top:1px solid var(--line)}
+#instala li::before{content:counter(p);font-family:var(--m);font-size:.8rem;
+  width:24px;height:24px;flex:none;border-radius:50%;background:var(--amber);color:#16232C;
+  display:grid;place-items:center;font-weight:600}
+#instala li b{font-weight:600}
+#instala .share{display:inline-flex;vertical-align:-5px;width:19px;height:19px;
+  align-items:center;justify-content:center;background:var(--surface-2);
+  border-radius:4px;margin:0 2px}
+#instala .share svg{width:12px;height:12px;fill:none;stroke:var(--canvas);stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+#instala .ojo{background:var(--tatami);border-left:3px solid var(--amber);border-radius:0 6px 6px 0;
+  padding:10px 12px;font-size:.86rem;color:var(--canvas);margin-bottom:18px}
+.flecha{position:fixed;left:50%;margin-left:-14px;bottom:calc(6px + env(safe-area-inset-bottom));
+  width:28px;color:var(--amber);animation:bota 1.3s ease-in-out infinite}
+@keyframes bota{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(9px);opacity:1}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tatame</h1>
+  <span class="sub" id="cabecera-sub">control de alumnos</span>
+  <button id="instalar" class="btn mini primario" hidden style="margin-left:auto">Instalar</button>
+</header>
+
+<main id="vista"></main>
+
+<button class="fab" id="fab" aria-label="Añadir alumno">+</button>
+
+<nav>
+  <button data-tab="avisos" aria-current="true">Avisos <span class="badge" id="badge" hidden></span></button>
+  <button data-tab="alumnos">Alumnos</button>
+  <button data-tab="ajustes">Ajustes</button>
+</nav>
+
+<div id="sheet" role="dialog" aria-modal="true"></div>
+<div id="instala" role="dialog" aria-modal="true" aria-labelledby="instala-t"></div>
+<div id="toast" role="status"></div>
+
+<script>
+/* ============================================================
+   ALMACENAMIENTO
+   Guarda en el propio móvil (localStorage). Si el navegador no
+   lo permite, sigue funcionando en memoria durante la sesión.
+   ============================================================ */
+const CLAVE = 'tatame.v1';
+const HITOS_DEF = [6,12,18,24,30,36,42,48,54,60];
+const HITOS_VIEJOS = ['3,6,9,12,18,24,36', '6,12,24,36,48,60'];
+let persistente = true;
+let memoria = null;
+
+function leer(){
+  if(memoria) return memoria;
+  try{
+    localStorage.setItem(CLAVE+'.test','1'); localStorage.removeItem(CLAVE+'.test');
+    const t = localStorage.getItem(CLAVE);
+    memoria = t ? JSON.parse(t) : {alumnos:[], hitos:HITOS_DEF.slice(), vistos:[]};
+  }catch(e){
+    persistente = false;
+    memoria = {alumnos:[], hitos:HITOS_DEF.slice(), vistos:[]};
+  }
+  if(!memoria.hitos || HITOS_VIEJOS.includes(memoria.hitos.join(','))) memoria.hitos = HITOS_DEF.slice();
+  if(!Array.isArray(memoria.vistos)) memoria.vistos = [];
+  // Fichas creadas antes de que existiera este campo: cuentan desde hoy,
+  // así no saltan de golpe los hitos que ya habían pasado.
+  (memoria.alumnos||[]).forEach(a => { if(!a.alta) a.alta = hoyISO(); });
+  return memoria;
+}
+function guardar(){
+  if(!persistente) return false;
+  try{ localStorage.setItem(CLAVE, JSON.stringify(memoria)); return true; }
+  catch(e){
+    if(!guardar.avisado){
+      guardar.avisado = true;
+      alert('No se ha podido guardar: no queda sitio en el móvil.\n\nQuita alguna foto o borra fichas de gente que ya no entrena. Antes de nada, descarga una copia desde Ajustes.');
+    }
+    return false;
+  }
+}
+let D = leer();
+
+/* ============================================================
+   FECHAS Y CÁLCULOS
+   ============================================================ */
+const hoyISO = () => new Date().toISOString().slice(0,10);
+const aDate = s => { const [a,m,d] = s.split('-').map(Number); return new Date(a, m-1, d); };
+const fmt = s => { if(!s) return '—'; const d = aDate(s);
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); };
+
+function dias(desde, hasta){
+  if(!desde) return 0;
+  return Math.floor((aDate(hasta||hoyISO()) - aDate(desde)) / 86400000);
+}
+function meses(desde, hasta){
+  if(!desde) return 0;
+  const a = aDate(desde), b = aDate(hasta||hoyISO());
+  let m = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth());
+  if(b.getDate() < a.getDate()) m--;
+  return Math.max(0, m);
+}
+
+/* Parones: cada uno es {desde:'AAAA-MM', hasta:'AAAA-MM'}. Sin "hasta"
+   significa que sigue parado hoy. Se cuenta por meses enteros: de junio
+   a agosto son 3 meses, que es como lo cuenta cualquiera. */
+const MESES_NOMBRE = ['enero','febrero','marzo','abril','mayo','junio',
+  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const mesActual = () => hoyISO().slice(0,7);
+const fmtMes = s => s ? MESES_NOMBRE[+s.slice(5,7)-1] + ' ' + s.slice(0,4) : '—';
+
+function mesesEntre(desde, hasta){
+  if(!desde) return 0;
+  const [a1,m1] = desde.split('-').map(Number);
+  const [a2,m2] = (hasta || mesActual()).split('-').map(Number);
+  return Math.max(0, (a2-a1)*12 + (m2-m1) + 1);
+}
+function mesAnterior(s){
+  let [a,m] = s.split('-').map(Number);
+  m--; if(m === 0){ m = 12; a--; }
+  return a+'-'+String(m).padStart(2,'0');
+}
+function normalizaBajas(al){
+  (al.bajas||[]).forEach(b => {
+    if(b.desde && b.desde.length > 7) b.desde = b.desde.slice(0,7);
+    if(b.hasta && b.hasta.length > 7) b.hasta = b.hasta.slice(0,7);
+  });
+  return al.bajas || [];
+}
+function mesesBaja(al){
+  return normalizaBajas(al).reduce((t,b) => t + mesesEntre(b.desde, b.hasta), 0);
+}
+function mesesNetos(al){ return Math.max(0, meses(al.fechaInicio) - mesesBaja(al)); }
+function bajaAbierta(al){ return normalizaBajas(al).find(b => b.desde && !b.hasta); }
+function deBajaAhora(al){ return !!bajaAbierta(al); }
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+const FAIXAS = ['blanco','gris','amarillo','naranja','verde','azul','morado','marron','negro'];
+const NOMBRE_FAIXA = {blanco:'Blanco',gris:'Gris',amarillo:'Amarillo',naranja:'Naranja',
+  verde:'Verde',azul:'Azul',morado:'Morado',marron:'Marrón',negro:'Negro'};
+
+function faixaHTML(f, g, grande){
+  const col = getComputedStyle(document.documentElement).getPropertyValue('--w-'+(f||'blanco'));
+  let graus = '';
+  for(let i=0;i<(g||0);i++) graus += '<i class="grau"></i>';
+  return `<span class="faixa${grande?' lg':''}" data-f="${f||'blanco'}" role="img"
+    aria-label="Cinturón ${NOMBRE_FAIXA[f]||'blanco'} con ${g||0} grados">
+    <span class="cuerpo" style="background:${col}"></span>
+    <span class="punta">${graus}</span></span>`;
+}
+
+/* ============================================================
+   AVISOS
+   Cumpleaños del día e hitos de entrenamiento. Un hito solo avisa
+   si se cumple con la ficha ya creada: si das de alta a alguien
+   que lleva 11 meses, no te salta el de los 6 meses.
+   ============================================================ */
+const VENTANA_HITO = 45;
+
+function sumaMeses(iso, n){
+  const d = aDate(iso);
+  const t = new Date(d.getFullYear(), d.getMonth()+n, d.getDate());
+  return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+}
+function fechaHito(al, h){ return sumaMeses(al.fechaInicio, h + mesesBaja(al)); }
+
+function cumple(fechaNac){
+  if(!fechaNac) return null;
+  const hoy = aDate(hoyISO()), n = aDate(fechaNac);
+  let c = new Date(hoy.getFullYear(), n.getMonth(), n.getDate());
+  if(c < hoy) c = new Date(hoy.getFullYear()+1, n.getMonth(), n.getDate());
+  return {dias: Math.round((c-hoy)/86400000), edad: c.getFullYear()-n.getFullYear(),
+          clave: c.getFullYear()};
+}
+
+function avisos(){
+  const vistos = D.vistos || [];
+  const out = [];
+  D.alumnos.forEach(al => {
+    if(al.estado === 'baja' || deBajaAhora(al)) return;
+
+    // Cumpleaños, solo el mismo día
+    const c = cumple(al.fechaNac);
+    if(c && c.dias === 0){
+      const clave = 'c:'+al.id+':'+c.clave;
+      if(!vistos.includes(clave))
+        out.push({id:al.id, clave, quien:al.nombre, que:`Hoy cumple ${c.edad}.`, orden:0});
+    }
+
+    // Hitos de entrenamiento
+    const m = mesesNetos(al);
+    const alta = al.alta || al.fechaInicio;
+    D.hitos.filter(h => m >= h).forEach(h => {
+      const clave = 'h:'+al.id+':'+h;
+      if((al.hitosHechos||[]).includes(h) || vistos.includes(clave)) return;
+      const fh = fechaHito(al, h);
+      if(fh < alta) return;                    // ya lo había cumplido antes de existir la ficha
+      const desde = dias(fh);
+      if(desde < 0 || desde > VENTANA_HITO) return;
+      out.push({id:al.id, clave, quien:al.nombre,
+        que: h === 12 ? 'Cumple un año entrenando.'
+           : h % 12 === 0 ? `Cumple ${h/12} años entrenando.`
+           : `Cumple ${h} meses entrenando.`, orden:1});
+    });
+  });
+  return out.sort((a,b) => a.orden - b.orden);
+}
+
+/* ============================================================
+   VISTAS
+   ============================================================ */
+let tab = 'avisos';
+let filtro = 'todos';
+let busqueda = '';
+
+function pintar(){
+  const v = document.getElementById('vista');
+  const n = avisos().length;
+  const badge = document.getElementById('badge');
+  badge.hidden = n === 0; badge.textContent = n;
+  document.getElementById('fab').style.display = (tab === 'alumnos' || tab === 'avisos') ? 'grid' : 'none';
+  document.querySelectorAll('nav button').forEach(b =>
+    b.setAttribute('aria-current', b.dataset.tab === tab ? 'true' : 'false'));
+
+  if(tab === 'avisos')  v.innerHTML = vistaAvisos();
+  if(tab === 'alumnos') v.innerHTML = vistaAlumnos();
+  if(tab === 'ajustes') v.innerHTML = vistaAjustes();
+  v.classList.remove('aparece'); void v.offsetWidth; v.classList.add('aparece');
+
+  const activos = D.alumnos.filter(a=>a.estado!=='baja').length;
+  document.getElementById('cabecera-sub').textContent = activos + ' en el equipo';
+}
+
+function vistaAvisos(){
+  const lista = avisos();
+  let h = '';
+  if(!persistente){
+    h += `<div class="aviso rojo"><div class="txt"><div class="quien">Vista previa</div>
+      <div class="que">Aquí los datos no se guardan. Abre el archivo desde el móvil o desde tu web y sí se guardarán.</div>
+      </div></div>`;
+  }
+  h += `<div class="h2">Avisos <span class="n">${lista.length}</span></div>`;
+  if(!lista.length){
+    h += `<div class="vacio"><strong>Nada pendiente</strong>
+      ${D.alumnos.length ? 'Ni cumpleaños ni hitos hoy.' : 'Añade al primer alumno con el botón +.'}</div>`;
+  } else {
+    lista.forEach(a => {
+      h += `<div class="aviso">
+        <button class="txt" data-abrir="${a.id}">
+          <span class="quien">${esc(a.quien)}</span>
+          <span class="que">${esc(a.que)}</span></button>
+        <button class="tachar" data-tachar="${a.clave}" aria-label="Quitar aviso">✕</button>
+      </div>`;
+    });
+    h += `<button class="btn" id="borrarAvisos" style="margin-top:6px">Borrar todos los avisos</button>`;
+  }
+  return h;
+}
+
+function iniciales(n){
+  const p = String(n||'').trim().split(/\s+/).filter(Boolean);
+  if(!p.length) return '·';
+  return (p[0][0] + (p[1] ? p[1][0] : '')).toUpperCase();
+}
+function miniatura(a){
+  return a.foto
+    ? `<img class="thumb" src="${a.foto}" alt="">`
+    : `<span class="thumb ini" aria-hidden="true">${esc(iniciales(a.nombre))}</span>`;
+}
+
+function vistaAlumnos(){
+  let h = `<div class="buscador"><input id="q" type="search" placeholder="Buscar por nombre"
+      value="${esc(busqueda)}" autocomplete="off"></div>
+    <div class="filtros">
+      ${['todos','prueba','activos','bajas'].map(f =>
+        `<button data-filtro="${f}" aria-pressed="${filtro===f}">${f}</button>`).join('')}
+    </div>`;
+
+  let l = D.alumnos.slice();
+  if(filtro === 'prueba')  l = l.filter(a => !a.fichaHecha && a.estado !== 'baja');
+  if(filtro === 'activos') l = l.filter(a => a.fichaHecha && a.estado !== 'baja');
+  if(filtro === 'bajas')   l = l.filter(a => a.estado === 'baja');
+  if(busqueda) l = l.filter(a => a.nombre.toLowerCase().includes(busqueda.toLowerCase()));
+  l.sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||''));
+
+  if(!l.length) return h + `<div class="vacio"><strong>Sin resultados</strong>Prueba con otro filtro o añade un alumno.</div>`;
+
+  l.forEach(a => {
+    const m = mesesNetos(a);
+    const sig = D.hitos.find(x => x > m);
+    const etiqueta = (a.estado === 'baja' || deBajaAhora(a)) ? '<span class="chip baja">de baja</span>'
+      : (!a.fichaHecha ? '<span class="chip prueba">sin ficha</span>' : `<span class="chip">${NOMBRE_FAIXA[a.faixa]||'Blanco'}</span>`);
+    h += `<button class="card" data-abrir="${a.id}">
+      <span class="top">
+        ${miniatura(a)}
+        <span style="flex:1;min-width:0"><span class="nombre">${esc(a.nombre)}</span><br>${etiqueta}</span>
+        <span class="meses">${m}<small>meses</small></span>
+      </span>
+      ${faixaHTML(a.faixa, a.grados)}
+      <span class="pie"><span>Desde ${fmt(a.fechaInicio)}</span>
+      <span>${sig ? 'próx. hito: '+sig+' m' : 'sin hitos'}</span></span>
+    </button>`;
+  });
+  return h;
+}
+
+function vistaAjustes(){
+  return `<div class="h2">La app en el móvil</div>
+  <p style="color:var(--muted);font-size:.9rem;margin-top:0">
+    ${yaInstalada() ? 'Ya está instalada: entras desde el icono y funciona sin cobertura.'
+    : 'Ponla en la pantalla de inicio y se abre como una app normal, sin barra de navegador.'}</p>
+  ${yaInstalada() ? '' : `<button class="btn primario" id="btnInstalar" style="margin-bottom:6px">${esIOS ? 'Cómo instalarla en el iPhone' : 'Instalar en la pantalla de inicio'}</button>
+  <p style="color:var(--muted);font-size:.8rem;margin:0 0 4px">
+    ${esIOS ? 'En Safari: Compartir → Añadir a pantalla de inicio.'
+    : 'Si el botón no hace nada: menú del navegador (⋮) → Añadir a pantalla de inicio.'}</p>`}
+
+  <div class="h2">Copias de seguridad</div>
+  <p style="color:var(--muted);font-size:.9rem;margin-top:0">
+    Los datos viven solo en este móvil. Descarga una copia de vez en cuando y guárdala donde quieras.</p>
+  <button class="btn primario" id="exp" style="margin-bottom:10px">Descargar copia (.json)</button>
+  <button class="btn" id="expcsv" style="margin-bottom:10px">Descargar lista en Excel (.csv)</button>
+  <label class="btn" for="imp" style="margin-bottom:10px">Restaurar desde copia</label>
+  <input id="imp" type="file" accept=".json,application/json" style="display:none">
+
+  <div class="h2">Avisos</div>
+  <div class="campo"><label for="s-hitos">Meses que avisan</label>
+    <input id="s-hitos" value="${D.hitos.join(', ')}" inputmode="numeric">
+    <p style="color:var(--muted);font-size:.8rem;margin:6px 0 0">
+      Separados por comas. Un hito solo avisa si se cumple con la ficha ya creada, y solo
+      durante los 45 días siguientes. Los cumpleaños avisan el mismo día, sin configurar nada.</p></div>
+  <button class="btn primario" id="guardaAjustes">Guardar ajustes</button>
+
+  <div class="h2">Zona peligrosa</div>
+  <button class="btn peligro" id="borrarTodo">Borrar todos los datos</button>
+
+  <p class="nota-legal">Aquí hay datos personales de otras personas: pide su permiso, no metas nada
+  que no necesites y guarda las copias en sitio seguro. Los menores necesitan permiso de padre, madre o tutor.</p>
+  <p class="nota-legal" style="text-align:center">Tatame · versión 13</p>`;
+}
+
+function actualizaPrevia(){
+  const p = document.getElementById('previaParon');
+  if(!p || !abierto) return;
+  const d1 = leeMes('b-mes1','b-anio1'), d2 = leeMes('b-mes2','b-anio2');
+  if(d2 < d1){
+    p.innerHTML = `<span class="mal">El "hasta" tiene que ir después del "desde".</span>`;
+    return;
+  }
+  const nuevos = mesesEntre(d1, d2);
+  const total = meses(abierto.fechaInicio);
+  const yaBaja = mesesBaja(abierto);
+  const queda = Math.max(0, total - yaBaja - nuevos);
+  p.innerHTML = `<b>${nuevos} ${nuevos===1?'mes':'meses'}</b> sin entrenar.
+    El efectivo pasaría de ${Math.max(0,total-yaBaja)} a <b>${queda} ${queda===1?'mes':'meses'}</b>.`;
+}
+
+function guardaParon(desde, hasta){
+  recogerFicha();
+  abierto.bajas = normalizaBajas(abierto);
+  abierto.bajas.push({desde, hasta});
+  abierto.bajas.sort((a,b) => a.desde.localeCompare(b.desde));
+  if(!hasta) abierto.estado = 'baja';
+  if(!D.alumnos.some(x => x.id === abierto.id)) D.alumnos.push(abierto);
+  guardar(); abrirFicha(abierto.id);
+  toast(hasta ? mesesEntre(desde,hasta) + ' meses descontados' : 'Marcado como parado');
+}
+
+function selMes(id, valor){
+  const m = +valor.slice(5,7);
+  return `<select id="${id}">${MESES_NOMBRE.map((n,i) =>
+    `<option value="${i+1}" ${i+1===m?'selected':''}>${n}</option>`).join('')}</select>`;
+}
+function selAnio(id, valor){
+  const a = +valor.slice(0,4), hoy = +hoyISO().slice(0,4);
+  let op = '';
+  for(let y = hoy; y >= hoy-12; y--) op += `<option value="${y}" ${y===a?'selected':''}>${y}</option>`;
+  return `<select id="${id}">${op}</select>`;
+}
+function leeMes(idM, idA){
+  return document.getElementById(idA).value + '-' +
+    String(document.getElementById(idM).value).padStart(2,'0');
+}
+
+/* ============================================================
+   FICHA DEL ALUMNO
+   ============================================================ */
+let abierto = null;
+let sucio = false;
+
+function abrirFicha(id){
+  sucio = false;
+  const s = document.getElementById('sheet');
+  const nuevo = !id;
+  const a = nuevo
+    ? {id:uid(), nombre:'', telefono:'', fechaNac:'', fechaInicio:hoyISO(), alta:hoyISO(),
+       faixa:'blanco', grados:0, estado:'activo', fichaHecha:false, hitosHechos:[], notas:[],
+       bajas:[], obs:'', foto:''}
+    : D.alumnos.find(x => x.id === id);
+  if(!a) return;
+  abierto = a;
+  const mNeto = mesesNetos(a), mTotal = meses(a.fechaInicio), mBaja = mesesBaja(a);
+  const deBaja = deBajaAhora(a);
+  const m = mNeto;
+
+  let bajas = normalizaBajas(a).map((b,i) => `<div class="hito">
+    <div class="info"><div class="mes">${b.hasta && b.hasta !== b.desde
+        ? `De ${fmtMes(b.desde)} a ${fmtMes(b.hasta)}`
+        : (b.hasta ? `Solo ${fmtMes(b.desde)}` : `Parado desde ${fmtMes(b.desde)}`)}</div>
+      <div class="est">${mesesEntre(b.desde, b.hasta)} ${mesesEntre(b.desde, b.hasta) === 1 ? 'mes' : 'meses'} sin entrenar</div></div>
+    <button class="marca" data-borrabaja="${i}" aria-label="Borrar este parón">✕</button>
+  </div>`).join('') || `<p style="color:var(--muted);font-size:.88rem;margin:4px 0 12px">
+    Ningún parón apuntado. Los meses cuentan desde el primer día.</p>`;
+
+  let hitos = '';
+  D.hitos.forEach(h => {
+    const hecho = (a.hitosHechos||[]).includes(h);
+    const tocado = m >= h && !hecho;
+    hitos += `<div class="hito ${hecho?'listo':''} ${tocado?'tocado':''}">
+      <button class="marca" data-hito="${h}" aria-label="Marcar ${h} meses como revisado">${hecho?'✓':(tocado?'!':'')}</button>
+      <div class="info"><div class="mes">${h} meses</div>
+        <div class="est">${hecho ? 'revisado' : (tocado ? 'pendiente de revisar' : 'faltan '+(h-m)+' meses')}</div></div>
+    </div>`;
+  });
+
+  let notas = (a.notas||[]).map((n,i) => `<div class="nota">
+    <div class="cab"><span>${fmt(n.fecha)}</span><button data-borranota="${i}" aria-label="Borrar nota">✕</button></div>
+    <p>${esc(n.texto)}</p></div>`).join('') ||
+    `<div class="vacio" style="padding:18px"><strong>Sin notas</strong>Apunta lo que quieras recordar de este alumno.</div>`;
+
+  s.innerHTML = `
+  <div class="sheet-bar">
+    <button id="cerrar" class="btn mini contorno">✕ Cerrar</button>
+    <span class="t">${nuevo ? 'Nuevo alumno' : 'Ficha'}</span>
+    <button id="guardaFicha" class="btn mini primario">Guardar</button>
+  </div>
+
+  ${nuevo ? '' : `<div style="margin:14px 0 20px">
+    ${faixaHTML(a.faixa, a.grados, true)}
+    <div class="resumen">
+      <div class="fila-r"><span>Empezó</span><b>${fmt(a.fechaInicio)}</b></div>
+      <div class="fila-r"><span>Desde entonces</span><b>${mTotal} ${mTotal===1?'mes':'meses'}</b></div>
+      ${mBaja ? `<div class="fila-r"><span>Parones</span><b class="resta">− ${mBaja} ${mBaja===1?'mes':'meses'}</b></div>` : ''}
+      <div class="fila-r total">
+        <span>Entrenamiento efectivo</span>
+        <b>${mNeto} ${mNeto===1?'mes':'meses'}</b>
+      </div>
+    </div>
+    ${deBaja ? '<div class="parado">Ahora mismo está parado: el contador no corre.</div>' : ''}
+  </div>`}
+
+  <div class="foto-fila">
+    <span id="fotoBox">${a.foto
+      ? `<img class="retrato" src="${a.foto}" alt="Foto de ${esc(a.nombre)}">`
+      : `<span class="retrato ini" aria-hidden="true">${esc(iniciales(a.nombre))}</span>`}</span>
+    <span class="acciones">
+      <button class="btn mini contorno" id="btnCamara">Cámara</button>
+      <button class="btn mini contorno" id="btnGaleria">Carrete</button>
+      ${a.foto ? '<button class="btn mini peligro" id="btnQuitarFoto">Quitar foto</button>' : ''}
+    </span>
+  </div>
+  <input type="file" id="f-camara" accept="image/*" capture="environment" hidden>
+  <input type="file" id="f-galeria" accept="image/*" hidden>
+
+  <div class="campo"><label for="f-nombre">Nombre y apellidos</label>
+    <input id="f-nombre" value="${esc(a.nombre)}" autocomplete="name"></div>
+  <div class="fila">
+    <div class="campo"><label for="f-inicio">Primer día</label>
+      <input id="f-inicio" type="date" value="${a.fechaInicio||''}"></div>
+    <div class="campo"><label for="f-nac">Fecha de nacimiento</label>
+      <input id="f-nac" type="date" value="${a.fechaNac||''}"></div>
+  </div>
+  <div class="campo"><label for="f-tel">Teléfono</label>
+    <input id="f-tel" type="tel" value="${esc(a.telefono)}" inputmode="tel"></div>
+  <div class="fila">
+    <div class="campo"><label for="f-faixa">Cinturón</label>
+      <select id="f-faixa">${FAIXAS.map(f =>
+        `<option value="${f}" ${a.faixa===f?'selected':''}>${NOMBRE_FAIXA[f]}</option>`).join('')}</select></div>
+    <div class="campo"><label for="f-grados">Grados</label>
+      <select id="f-grados">${[0,1,2,3,4].map(g =>
+        `<option value="${g}" ${(a.grados||0)==g?'selected':''}>${g}</option>`).join('')}</select></div>
+  </div>
+  <div class="fila">
+    <div class="campo"><label for="f-estado">Situación</label>
+      <select id="f-estado">
+        <option value="activo" ${a.estado==='activo'?'selected':''}>Entrenando</option>
+        <option value="baja" ${a.estado==='baja'?'selected':''}>Baja</option>
+      </select></div>
+    <div class="campo"><label for="f-ficha">Ficha de datos</label>
+      <select id="f-ficha">
+        <option value="no" ${!a.fichaHecha?'selected':''}>Pendiente</option>
+        <option value="si" ${a.fichaHecha?'selected':''}>Hecha</option>
+      </select></div>
+  </div>
+  <div class="campo"><label for="f-obs">Datos de interés (lesiones, objetivos, seguro…)</label>
+    <textarea id="f-obs">${esc(a.obs)}</textarea></div>
+
+  ${nuevo ? '' : `
+  <div class="h2">Parones</div>
+  ${bajas}
+  ${deBaja ? `<button class="btn contorno" id="btnBaja" style="margin-bottom:10px">Ya ha vuelto</button>` : ''}
+  <button class="btn contorno" id="btnAbrirParon" style="margin-bottom:16px">+ Añadir parón</button>
+
+  <div id="panelParon" hidden>
+    <div class="tramo">
+      <span class="et">Desde</span>
+      ${selMes('b-mes1', mesActual())}${selAnio('b-anio1', mesActual())}
+    </div>
+    <div class="tramo">
+      <span class="et">Hasta</span>
+      ${selMes('b-mes2', mesActual())}${selAnio('b-anio2', mesActual())}
+    </div>
+    <div class="previa" id="previaParon"></div>
+    <div class="fila" style="margin-bottom:10px">
+      <button class="btn" id="btnCancelarParon">Cancelar</button>
+      <button class="btn primario" id="btnAceptarParon">Aceptar</button>
+    </div>
+    ${deBaja ? '' : `<button class="btn" id="btnSigueParado" style="margin-bottom:16px">
+      Sigue parado, sin fecha de vuelta</button>`}
+  </div>
+
+  <div class="h2">Hitos</div>${hitos}
+  <div class="h2">Notas</div>
+  <div class="campo"><textarea id="f-nueva" placeholder="Escribe una nota y añádela al historial"></textarea></div>
+  <button class="btn" id="addNota" style="margin-bottom:16px">Añadir nota</button>
+  ${notas}
+  <div class="h2">Eliminar</div>
+  <button class="btn peligro" id="borrarAlumno" style="margin-bottom:20px">Borrar este alumno</button>`}
+  `;
+  s.classList.add('abierta');
+  aplicarTema(a.faixa);
+  s.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+  if(nuevo) setTimeout(()=>document.getElementById('f-nombre').focus(), 60);
+  s.dataset.nuevo = nuevo ? '1' : '';
+}
+
+function cerrarFicha(){
+  const s = document.getElementById('sheet');
+  s.classList.remove('abierta'); s.innerHTML = '';
+  document.body.style.overflow = '';
+  abierto = null; pintar();
+}
+
+function recogerFicha(){
+  const g = id => document.getElementById(id);
+  const a = abierto;
+  a.nombre = g('f-nombre').value.trim();
+  a.fechaInicio = g('f-inicio').value || hoyISO();
+  a.fechaNac = g('f-nac').value;
+  a.telefono = g('f-tel').value.trim();
+  a.faixa = g('f-faixa').value;
+  a.grados = +g('f-grados').value;
+  a.estado = g('f-estado').value;
+  a.fichaHecha = g('f-ficha').value === 'si';
+  a.obs = g('f-obs').value;
+  return a;
+}
+
+/* ============================================================
+   EVENTOS
+   ============================================================ */
+function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+let tmr;
+function toast(t){
+  const el = document.getElementById('toast');
+  el.textContent = t; el.classList.add('ver');
+  clearTimeout(tmr); tmr = setTimeout(()=>el.classList.remove('ver'), 1600);
+}
+
+document.querySelector('nav').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]'); if(!b) return;
+  tab = b.dataset.tab; pintar(); window.scrollTo(0,0);
+});
+
+document.getElementById('fab').addEventListener('click', () => abrirFicha(null));
+
+document.getElementById('vista').addEventListener('click', e => {
+  const tach = e.target.closest('[data-tachar]');
+  if(tach){
+    D.vistos = D.vistos || [];
+    D.vistos.push(tach.dataset.tachar);
+    guardar(); pintar(); return;
+  }
+  if(e.target.id === 'borrarAvisos'){
+    D.vistos = (D.vistos || []).concat(avisos().map(a => a.clave));
+    guardar(); pintar(); toast('Avisos borrados'); return;
+  }
+  const ab = e.target.closest('[data-abrir]');
+  if(ab) return abrirFicha(ab.dataset.abrir);
+
+  const f = e.target.closest('[data-filtro]');
+  if(f){ filtro = f.dataset.filtro; pintar(); return; }
+
+  if(e.target.id === 'btnInstalar') return lanzarInstalacion();
+  if(e.target.id === 'exp') return exportarJSON();
+  if(e.target.id === 'expcsv') return exportarCSV();
+  if(e.target.id === 'guardaAjustes'){
+    const h = document.getElementById('s-hitos').value.split(',')
+      .map(x => parseInt(x.trim(),10)).filter(x => x > 0).sort((a,b)=>a-b);
+    D.hitos = h.length ? [...new Set(h)] : D.hitos;
+    guardar(); pintar(); toast('Ajustes guardados'); return;
+  }
+  if(e.target.id === 'borrarTodo'){
+    if(confirm('Se borran todos los alumnos y sus notas de este móvil. ¿Seguro?')){
+      memoria = {alumnos:[], hitos:D.hitos, vistos:[]};
+      D = memoria; guardar(); pintar(); toast('Datos borrados');
+    }
+    return;
+  }
+});
+
+document.getElementById('vista').addEventListener('input', e => {
+  if(e.target.id === 'q'){
+    busqueda = e.target.value;
+    const pos = e.target.selectionStart;
+    pintar();
+    const q = document.getElementById('q');
+    if(q){ q.focus(); q.setSelectionRange(pos,pos); }
+  }
+});
+
+document.getElementById('vista').addEventListener('change', e => {
+  if(e.target.id === 'imp' && e.target.files[0]) importar(e.target.files[0]);
+});
+
+document.getElementById('sheet').addEventListener('input', () => { sucio = true; });
+document.getElementById('sheet').addEventListener('change', e => {
+  if(/^b-(mes|anio)[12]$/.test(e.target.id)){ actualizaPrevia(); return; }
+  if(e.target.id === 'f-faixa'){ aplicarTema(e.target.value); sucio = true; return; }
+  if((e.target.id === 'f-camara' || e.target.id === 'f-galeria') && e.target.files[0]){
+    ponerFoto(e.target.files[0]);
+    e.target.value = '';
+  }
+});
+document.getElementById('sheet').addEventListener('click', e => {
+  const t = e.target;
+  if(t.id === 'btnCamara'){ document.getElementById('f-camara').click(); return; }
+  if(t.id === 'btnGaleria'){ document.getElementById('f-galeria').click(); return; }
+  if(t.id === 'btnQuitarFoto'){
+    abierto.foto = '';
+    pintarFoto(); sucio = true;
+    if(D.alumnos.some(x => x.id === abierto.id)){ recogerFicha(); guardar(); }
+    return;
+  }
+  if(t.id === 'cerrar'){
+    if(!sucio || confirm('Hay cambios sin guardar. ¿Salir igualmente?')) cerrarFicha();
+    return;
+  }
+  if(t.id === 'guardaFicha'){
+    const a = recogerFicha();
+    if(!a.nombre){ toast('Falta el nombre'); document.getElementById('f-nombre').focus(); return; }
+    if(!D.alumnos.some(x => x.id === a.id)) D.alumnos.push(a);
+    guardar(); cerrarFicha(); toast('Ficha guardada'); return;
+  }
+  if(t.id === 'btnAbrirParon'){
+    const p = document.getElementById('panelParon');
+    p.hidden = false;
+    t.hidden = true;
+    actualizaPrevia();
+    p.scrollIntoView({block:'center', behavior:'smooth'});
+    return;
+  }
+  if(t.id === 'btnCancelarParon'){
+    document.getElementById('panelParon').hidden = true;
+    document.getElementById('btnAbrirParon').hidden = false;
+    return;
+  }
+  if(t.id === 'btnAceptarParon'){
+    const d1 = leeMes('b-mes1','b-anio1'), d2 = leeMes('b-mes2','b-anio2');
+    if(d2 < d1){ toast('El "hasta" va después del "desde"'); return; }
+    guardaParon(d1, d2);
+    return;
+  }
+  if(t.id === 'btnSigueParado'){
+    guardaParon(leeMes('b-mes1','b-anio1'), '');
+    return;
+  }
+  if(t.id === 'btnBaja'){
+    recogerFicha();
+    abierto.bajas = normalizaBajas(abierto);
+    const abierta = bajaAbierta(abierto);
+    if(abierta){
+      const fin = mesAnterior(mesActual());
+      abierta.hasta = fin < abierta.desde ? abierta.desde : fin;
+      abierto.estado = 'activo';
+    }
+    guardar(); abrirFicha(abierto.id); return;
+  }
+  const bb = t.closest('[data-borrabaja]');
+  if(bb){
+    recogerFicha();
+    abierto.bajas.splice(+bb.dataset.borrabaja, 1);
+    guardar(); abrirFicha(abierto.id); return;
+  }
+  const h = t.closest('[data-hito]');
+  if(h){
+    recogerFicha();
+    const n = +h.dataset.hito;
+    abierto.hitosHechos = abierto.hitosHechos || [];
+    abierto.hitosHechos = abierto.hitosHechos.includes(n)
+      ? abierto.hitosHechos.filter(x => x !== n) : [...abierto.hitosHechos, n];
+    guardar(); abrirFicha(abierto.id); return;
+  }
+  if(t.id === 'addNota'){
+    const ta = document.getElementById('f-nueva');
+    const txt = ta.value.trim();
+    if(!txt){ toast('Escribe algo primero'); return; }
+    recogerFicha();
+    abierto.notas = abierto.notas || [];
+    abierto.notas.unshift({fecha:hoyISO(), texto:txt});
+    guardar(); abrirFicha(abierto.id); toast('Nota añadida'); return;
+  }
+  const bn = t.closest('[data-borranota]');
+  if(bn){
+    recogerFicha();
+    abierto.notas.splice(+bn.dataset.borranota, 1);
+    guardar(); abrirFicha(abierto.id); return;
+  }
+  if(t.id === 'borrarAlumno'){
+    if(confirm('Se borra la ficha y todas sus notas. ¿Seguro?')){
+      D.alumnos = D.alumnos.filter(x => x.id !== abierto.id);
+      guardar(); cerrarFicha(); toast('Alumno borrado');
+    }
+    return;
+  }
+});
+
+/* ============================================================
+   COPIAS
+   ============================================================ */
+function bajar(nombre, texto, tipo){
+  const url = URL.createObjectURL(new Blob([texto], {type:tipo}));
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+function exportarJSON(){
+  bajar('tatame-'+hoyISO()+'.json', JSON.stringify(D, null, 2), 'application/json');
+  toast('Copia descargada');
+}
+function exportarCSV(){
+  const cab = ['Nombre','Primer día','Meses entrenados','Meses de baja','Cinturón','Grados','Ficha','Situación','Teléfono','Nacimiento'];
+  const filas = D.alumnos.map(a => [a.nombre, fmt(a.fechaInicio), mesesNetos(a), mesesBaja(a),
+    NOMBRE_FAIXA[a.faixa]||'', a.grados||0, a.fichaHecha?'Hecha':'Pendiente', a.estado,
+    a.telefono||'', a.fechaNac?fmt(a.fechaNac):'']);
+  const csv = [cab, ...filas].map(f => f.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n');
+  bajar('alumnos-'+hoyISO()+'.csv', '\uFEFF'+csv, 'text/csv');
+  toast('Lista descargada');
+}
+function importar(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const d = JSON.parse(r.result);
+      if(!d || !Array.isArray(d.alumnos)) throw 0;
+      if(!confirm('Esto sustituye los datos actuales por los de la copia. ¿Seguir?')) return;
+      memoria = d; D = leer(); guardar(); pintar(); toast('Copia restaurada');
+    }catch(e){ alert('Ese archivo no es una copia válida de Tatame.'); }
+  };
+  r.readAsText(file);
+}
+
+/* ============================================================
+   INSTALAR EN EL MÓVIL / FUNCIONAR SIN COBERTURA
+   ============================================================ */
+let promptInstalar = null;
+const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const yaInstalada = () => window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  promptInstalar = e;
+  if(!yaInstalada()) document.getElementById('instalar').hidden = false;
+  const b = document.getElementById('btnInstalar'); if(b) b.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  promptInstalar = null;
+  document.getElementById('instalar').hidden = true;
+  toast('App instalada');
+});
+
+const ICONO_SHARE = '<span class="share"><svg viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></span>';
+const otroNavegadorIOS = esIOS && /CriOS|FxiOS|EdgiOS|OPiOS|Brave/.test(navigator.userAgent);
+
+function verCartelInstalar(){
+  const c = document.getElementById('instala');
+  if(otroNavegadorIOS){
+    c.innerHTML = `<div class="caja">
+      ${faixaHTML('negro',2,true)}
+      <h2 id="instala-t">Ábrela en Safari</h2>
+      <p class="lead">El iPhone solo deja poner apps en la pantalla de inicio desde Safari.
+        Desde este navegador no se puede.</p>
+      <div class="ojo">Copia la dirección, ábrela en Safari y vuelve a entrar aquí: te saldrán los pasos.</div>
+      <button class="btn primario" id="copiarLink" style="margin-bottom:9px">Copiar la dirección</button>
+      <button class="btn" data-cerrar-instala>Seguir aquí de momento</button>
+    </div>`;
+  } else {
+    c.innerHTML = `<div class="caja">
+      ${faixaHTML('negro',2,true)}
+      <h2 id="instala-t">Ponla en tu pantalla de inicio</h2>
+      <p class="lead">Tres toques y la tienes como una app más, con su icono y sin barra de navegador.</p>
+      <ol>
+        <li><span>Pulsa ${ICONO_SHARE} <b>Compartir</b>, en la barra de abajo de Safari
+          (o arriba a la derecha si tienes la barra arriba).</span></li>
+        <li><span>Baja por la lista y elige <b>Añadir a pantalla de inicio</b>.</span></li>
+        <li><span>Pulsa <b>Añadir</b>, arriba a la derecha.</span></li>
+      </ol>
+      <div class="ojo">Hazlo antes de dar de alta al primer alumno: la app guarda los datos
+        en su propio sitio y no se lleva lo que apuntes aquí en el navegador.</div>
+      <button class="btn primario" data-cerrar-instala>Hecho</button>
+      <p style="text-align:center;margin:12px 0 0"><button data-cerrar-instala
+        style="color:var(--muted);font-size:.85rem;text-decoration:underline">Ahora no</button></p>
+    </div>
+    <svg class="flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 4v15"/><path d="M5.5 13.5L12 20l6.5-6.5"/></svg>`;
+  }
+  c.classList.add('ver');
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarCartel(){
+  document.getElementById('instala').classList.remove('ver');
+  document.getElementById('instala').innerHTML = '';
+  document.body.style.overflow = '';
+  try{ localStorage.setItem(CLAVE+'.visto','1'); }catch(e){}
+}
+
+document.getElementById('instala').addEventListener('click', e => {
+  if(e.target.closest('[data-cerrar-instala]')) return cerrarCartel();
+  if(e.target.id === 'copiarLink'){
+    const t = location.href;
+    if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>toast('Dirección copiada'),()=>prompt('Copia la dirección:', t));
+    else prompt('Copia la dirección:', t);
+  }
+});
+
+let cartelVisto = false;
+try{ cartelVisto = localStorage.getItem(CLAVE+'.visto') === '1'; }catch(e){}
+if(esIOS && !yaInstalada()) document.getElementById('instalar').hidden = false;
+if(esIOS && !yaInstalada() && !cartelVisto && location.protocol.startsWith('http')){
+  setTimeout(verCartelInstalar, 700);
+}
+
+/* ============================================================
+   COLOR DE LA FICHA SEGÚN EL CINTURÓN
+   Tonos pastel y el texto siempre en el que contrasta.
+   ============================================================ */
+const TEMA = {
+  blanco:  {bg:'#F4F1EA', sup:'#EAE5D9', sup2:'#DFD8C9', linea:'#CDC5B3', txt:'#1D1B16', mut:'#6A6354', acc:'#8A5A00'},
+  gris:    {bg:'#DFE3E5', sup:'#D3D8DB', sup2:'#C6CCD0', linea:'#B1B9BE', txt:'#1B2124', mut:'#5B656B', acc:'#7A5100'},
+  amarillo:{bg:'#F7EBBC', sup:'#F1E2A9', sup2:'#E9D794', linea:'#D7C276', txt:'#33290A', mut:'#6D5F26', acc:'#7C5300'},
+  naranja: {bg:'#F9DFC7', sup:'#F3D3B5', sup2:'#EBC6A0', linea:'#DAAE81', txt:'#3B2410', mut:'#79522F', acc:'#8A4B08'},
+  verde:   {bg:'#CDE6D4', sup:'#BFDDC7', sup2:'#AFD3B9', linea:'#97C2A3', txt:'#152F1E', mut:'#4A6A54', acc:'#1F6B3D'},
+  azul:    {bg:'#C9DAF3', sup:'#BACFEE', sup2:'#A9C2E7', linea:'#8EAEDC', txt:'#12243F', mut:'#405773', acc:'#1D4E9B'},
+  morado:  {bg:'#DCCFEF', sup:'#D0BFE9', sup2:'#C2AEE1', linea:'#AD96D2', txt:'#2A1B44', mut:'#604F89', acc:'#5A3596'},
+  marron:  {bg:'#E5D4C1', sup:'#DCC7B0', sup2:'#D0B89E', linea:'#BEA083', txt:'#382415', mut:'#74583E', acc:'#7A4A16'},
+  negro:   {bg:'#2E3439', sup:'#39424A', sup2:'#455059', linea:'#55626C', txt:'#EDEEF0', mut:'#9AA7B1', acc:'#F0A93B'}
+};
+
+function aplicarTema(f){
+  const s = document.getElementById('sheet');
+  const t = TEMA[f] || TEMA.blanco;
+  s.style.setProperty('--tatami', t.bg);
+  s.style.setProperty('--surface', t.sup);
+  s.style.setProperty('--surface-2', t.sup2);
+  s.style.setProperty('--line', t.linea);
+  s.style.setProperty('--canvas', t.txt);
+  s.style.setProperty('--muted', t.mut);
+  s.style.setProperty('--acc', t.acc);
+  s.style.background = t.bg;
+}
+
+/* ============================================================
+   FOTOS
+   Se recortan en cuadrado y se reducen a 320 px antes de
+   guardarlas, para que el móvil no se quede sin sitio.
+   ============================================================ */
+const LADO_FOTO = 320;
+
+async function aMiniatura(file){
+  let src;
+  try{ src = await createImageBitmap(file, {imageOrientation:'from-image'}); }
+  catch(e){
+    src = await new Promise((ok, ko) => {
+      const img = new Image();
+      img.onload = () => ok(img);
+      img.onerror = ko;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const w = src.width, h = src.height, lado = Math.min(w, h);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = LADO_FOTO;
+  const cx = cv.getContext('2d');
+  cx.imageSmoothingQuality = 'high';
+  cx.drawImage(src, (w-lado)/2, (h-lado)/2, lado, lado, 0, 0, LADO_FOTO, LADO_FOTO);
+  if(src.close) src.close();
+  return cv.toDataURL('image/jpeg', 0.72);
+}
+
+function pintarFoto(){
+  const box = document.getElementById('fotoBox');
+  if(!box) return;
+  box.innerHTML = abierto.foto
+    ? `<img class="retrato" src="${abierto.foto}" alt="Foto de ${esc(abierto.nombre)}">`
+    : `<span class="retrato ini" aria-hidden="true">${esc(iniciales(document.getElementById('f-nombre').value))}</span>`;
+  const q = document.getElementById('btnQuitarFoto');
+  if(abierto.foto && !q){
+    const b = document.createElement('button');
+    b.className = 'btn mini peligro'; b.id = 'btnQuitarFoto'; b.textContent = 'Quitar foto';
+    document.querySelector('.foto-fila .acciones').appendChild(b);
+  }
+  if(!abierto.foto && q) q.remove();
+}
+
+async function ponerFoto(file){
+  if(!file) return;
+  try{
+    toast('Preparando la foto');
+    abierto.foto = await aMiniatura(file);
+    pintarFoto();
+    sucio = true;
+    if(D.alumnos.some(x => x.id === abierto.id)){ recogerFicha(); guardar(); }
+    toast('Foto lista');
+  }catch(e){
+    alert('No se ha podido usar esa imagen. Prueba con otra.');
+  }
+}
+
+async function lanzarInstalacion(){
+  if(promptInstalar){
+    promptInstalar.prompt();
+    await promptInstalar.userChoice;
+    promptInstalar = null;
+    document.getElementById('instalar').hidden = true;
+    return;
+  }
+  if(esIOS) return verCartelInstalar();
+  alert('Abre el menú del navegador (los tres puntos) y elige "Añadir a pantalla de inicio".');
+}
+document.getElementById('instalar').addEventListener('click', lanzarInstalacion);
+
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+pintar();
+</script>
+</body>
+</html>

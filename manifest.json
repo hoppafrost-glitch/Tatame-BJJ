@@ -1,0 +1,35 @@
+{
+  "name": "Tatame · Control de alumnos",
+  "short_name": "Tatame",
+  "description": "Seguimiento de alumnos de jiu-jitsu: fichas, meses de entrenamiento, hitos y notas.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#DAD1BF",
+  "theme_color": "#16232C",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
