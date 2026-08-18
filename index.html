@@ -180,6 +180,11 @@ nav .badge{font-family:var(--m);font-size:.62rem;background:var(--amber);color:#
 .previa b{font-family:var(--m);font-weight:600}
 .previa .mal{color:var(--alert)}
 
+.rescate{border:1px solid var(--amber);border-radius:10px;padding:16px;margin-top:12px}
+.rescate strong{display:block;font-family:var(--d);text-transform:uppercase;letter-spacing:.1em;
+  font-size:1.05rem;color:var(--amber);margin-bottom:6px}
+.rescate p{margin:0 0 13px;font-size:.88rem;color:var(--muted);line-height:1.45}
+
 /* ---------- resumen de tiempo en la ficha ---------- */
 .resumen{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:4px 14px}
 .fila-r{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
@@ -271,6 +276,22 @@ const HITOS_VIEJOS = ['3,6,9,12,18,24,36', '6,12,24,36,48,60'];
 let persistente = true;
 let memoria = null;
 
+function normaliza(m){
+  if(!m.hitos || HITOS_VIEJOS.includes(m.hitos.join(','))) m.hitos = HITOS_DEF.slice();
+  if(!Array.isArray(m.vistos)) m.vistos = [];
+  if(!Array.isArray(m.alumnos)) m.alumnos = [];
+  m.alumnos.forEach(a => {
+    // Fichas de versiones anteriores: cuentan de alta desde hoy, así no
+    // saltan de golpe los hitos que ya habían pasado.
+    if(!a.alta) a.alta = hoyISO();
+    if(!Array.isArray(a.bajas)) a.bajas = [];
+    if(!Array.isArray(a.notas)) a.notas = [];
+    if(!Array.isArray(a.hitosHechos)) a.hitosHechos = [];
+    normalizaBajas(a);
+  });
+  return m;
+}
+
 function leer(){
   if(memoria) return memoria;
   try{
@@ -281,12 +302,7 @@ function leer(){
     persistente = false;
     memoria = {alumnos:[], hitos:HITOS_DEF.slice(), vistos:[]};
   }
-  if(!memoria.hitos || HITOS_VIEJOS.includes(memoria.hitos.join(','))) memoria.hitos = HITOS_DEF.slice();
-  if(!Array.isArray(memoria.vistos)) memoria.vistos = [];
-  // Fichas creadas antes de que existiera este campo: cuentan desde hoy,
-  // así no saltan de golpe los hitos que ya habían pasado.
-  (memoria.alumnos||[]).forEach(a => { if(!a.alta) a.alta = hoyISO(); });
-  return memoria;
+  return normaliza(memoria);
 }
 function guardar(){
   if(!persistente) return false;
@@ -304,10 +320,12 @@ let D = leer();
 /* ============================================================
    FECHAS Y CÁLCULOS
    ============================================================ */
-const hoyISO = () => new Date().toISOString().slice(0,10);
-const aDate = s => { const [a,m,d] = s.split('-').map(Number); return new Date(a, m-1, d); };
-const fmt = s => { if(!s) return '—'; const d = aDate(s);
-  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); };
+/* Estas tres van declaradas así a propósito: se usan al arrancar,
+   antes de llegar a esta parte del archivo. */
+function hoyISO(){ return new Date().toISOString().slice(0,10); }
+function aDate(s){ const [a,m,d] = s.split('-').map(Number); return new Date(a, m-1, d); }
+function fmt(s){ if(!s) return '—'; const d = aDate(s);
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 
 function dias(desde, hasta){
   if(!desde) return 0;
@@ -463,7 +481,17 @@ function vistaAvisos(){
   if(!lista.length){
     h += `<div class="vacio"><strong>Nada pendiente</strong>
       ${D.alumnos.length ? 'Ni cumpleaños ni hitos hoy.' : 'Añade al primer alumno con el botón +.'}</div>`;
-  } else {
+  }
+  if(!D.alumnos.length){
+    h += `<div class="rescate">
+      <strong>¿Ya tenías alumnos?</strong>
+      <p>Si venías usando una versión anterior, descarga allí la copia (.json) desde Ajustes
+      y tráela aquí. Se cargan todas las fichas tal cual, con sus fotos y sus notas.</p>
+      <label class="btn primario" for="impsuma">Traer mis fichas de antes</label>
+      <input id="impsuma" type="file" accept=".json,application/json" style="display:none">
+    </div>`;
+  }
+  if(lista.length){
     lista.forEach(a => {
       h += `<div class="aviso">
         <button class="txt" data-abrir="${a.id}">
@@ -536,11 +564,24 @@ function vistaAjustes(){
 
   <div class="h2">Copias de seguridad</div>
   <p style="color:var(--muted);font-size:.9rem;margin-top:0">
-    Los datos viven solo en este móvil. Descarga una copia de vez en cuando y guárdala donde quieras.</p>
-  <button class="btn primario" id="exp" style="margin-bottom:10px">Descargar copia (.json)</button>
-  <button class="btn" id="expcsv" style="margin-bottom:10px">Descargar lista en Excel (.csv)</button>
+    Los datos viven solo en este móvil. Descarga una copia de vez en cuando y guárdala donde quieras.
+    Hazla siempre <b>antes</b> de borrar el icono de la pantalla de inicio: al quitarlo, el iPhone
+    puede vaciar el almacén de la app.</p>
+  <p style="color:var(--muted);font-size:.9rem">Ahora mismo hay <b>${D.alumnos.length}</b>
+    ${D.alumnos.length===1?'alumno guardado':'alumnos guardados'}.</p>
+  <button class="btn primario" id="exp" style="margin-bottom:4px">Descargar copia (.json)</button>
+  <p style="color:var(--muted);font-size:.8rem;margin:0 0 12px">
+    Esta es la copia de verdad: lleva fichas, fotos, notas y parones, y es la única que se puede restaurar.</p>
+  <button class="btn" id="expcsv" style="margin-bottom:4px">Descargar lista en Excel (.csv)</button>
+  <p style="color:var(--muted);font-size:.8rem;margin:0 0 12px">
+    Solo para mirarla o imprimirla. No sirve para recuperar nada.</p>
   <label class="btn" for="imp" style="margin-bottom:10px">Restaurar desde copia</label>
   <input id="imp" type="file" accept=".json,application/json" style="display:none">
+  <label class="btn contorno" for="impsuma" style="margin-bottom:6px">Traer alumnos de otra copia</label>
+  <input id="impsuma" type="file" accept=".json,application/json" style="display:none">
+  <p style="color:var(--muted);font-size:.8rem;margin:0 0 4px">
+    "Restaurar" sustituye todo por lo de la copia. "Traer alumnos" los añade a los que ya hay,
+    sin tocar nada de lo actual y sin repetir a nadie.</p>
 
   <div class="h2">Avisos</div>
   <div class="campo"><label for="s-hitos">Meses que avisan</label>
@@ -555,7 +596,7 @@ function vistaAjustes(){
 
   <p class="nota-legal">Aquí hay datos personales de otras personas: pide su permiso, no metas nada
   que no necesites y guarda las copias en sitio seguro. Los menores necesitan permiso de padre, madre o tutor.</p>
-  <p class="nota-legal" style="text-align:center">Tatame · versión 13</p>`;
+  <p class="nota-legal" style="text-align:center">Tatame · versión 17</p>`;
 }
 
 function actualizaPrevia(){
@@ -750,7 +791,7 @@ function abrirFicha(id){
   aplicarTema(a.faixa);
   s.scrollTop = 0;
   document.body.style.overflow = 'hidden';
-  if(nuevo) setTimeout(()=>document.getElementById('f-nombre').focus(), 60);
+  if(nuevo) setTimeout(()=>{ const n = document.getElementById('f-nombre'); if(n) n.focus(); }, 60);
   s.dataset.nuevo = nuevo ? '1' : '';
 }
 
@@ -843,6 +884,7 @@ document.getElementById('vista').addEventListener('input', e => {
 
 document.getElementById('vista').addEventListener('change', e => {
   if(e.target.id === 'imp' && e.target.files[0]) importar(e.target.files[0]);
+  if(e.target.id === 'impsuma' && e.target.files[0]) fusionar(e.target.files[0]);
 });
 
 document.getElementById('sheet').addEventListener('input', () => { sucio = true; });
@@ -879,7 +921,7 @@ document.getElementById('sheet').addEventListener('click', e => {
     p.hidden = false;
     t.hidden = true;
     actualizaPrevia();
-    p.scrollIntoView({block:'center', behavior:'smooth'});
+    if(p.scrollIntoView) p.scrollIntoView({block:'center', behavior:'smooth'});
     return;
   }
   if(t.id === 'btnCancelarParon'){
@@ -950,15 +992,29 @@ document.getElementById('sheet').addEventListener('click', e => {
 /* ============================================================
    COPIAS
    ============================================================ */
-function bajar(nombre, texto, tipo){
-  const url = URL.createObjectURL(new Blob([texto], {type:tipo}));
+async function bajar(nombre, texto, tipo){
+  const blob = new Blob([texto], {type:tipo});
+  // En una app instalada en iOS no hay descargas: se usa el menú de
+  // compartir, que deja mandarla por WhatsApp o guardarla en Archivos.
+  try{
+    const f = new File([blob], nombre, {type:tipo});
+    if(navigator.canShare && navigator.canShare({files:[f]})){
+      await navigator.share({files:[f], title:nombre});
+      return true;
+    }
+  }catch(e){
+    if(e && e.name === 'AbortError') return false;
+  }
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
+  a.href = url; a.download = nombre; a.target = '_blank';
+  document.body.appendChild(a); a.click();
   a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  return true;
 }
-function exportarJSON(){
-  bajar('tatame-'+hoyISO()+'.json', JSON.stringify(D, null, 2), 'application/json');
-  toast('Copia descargada');
+async function exportarJSON(){
+  const ok = await bajar('tatame-'+hoyISO()+'.json', JSON.stringify(D, null, 2), 'application/json');
+  if(ok) toast('Copia de ' + D.alumnos.length + ' alumnos');
 }
 function exportarCSV(){
   const cab = ['Nombre','Primer día','Meses entrenados','Meses de baja','Cinturón','Grados','Ficha','Situación','Teléfono','Nacimiento'];
@@ -969,14 +1025,52 @@ function exportarCSV(){
   bajar('alumnos-'+hoyISO()+'.csv', '\uFEFF'+csv, 'text/csv');
   toast('Lista descargada');
 }
+function fusionar(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const d = JSON.parse(r.result);
+      if(!d || !Array.isArray(d.alumnos)) throw 0;
+      const clave = a => (a.nombre||'').trim().toLowerCase() + '|' + (a.fechaInicio||'');
+      const idsYa = new Set(D.alumnos.map(a => a.id));
+      const clavesYa = new Set(D.alumnos.map(clave));
+      const nuevos = d.alumnos.filter(a => !idsYa.has(a.id) && !clavesYa.has(clave(a)));
+      const repes = d.alumnos.length - nuevos.length;
+      if(!nuevos.length){
+        alert('Esa copia no trae a nadie nuevo: sus ' + d.alumnos.length +
+          ' alumnos ya están en el móvil.');
+        return;
+      }
+      if(!confirm(`Se añadirán ${nuevos.length} alumno${nuevos.length===1?'':'s'}` +
+        (repes ? ` (${repes} ya ${repes===1?'estaba':'estaban'} y se ${repes===1?'queda':'quedan'} como ${repes===1?'está':'están'})` : '') +
+        `.\n\nNo se borra nada de lo que hay ahora. ¿Seguir?`)) return;
+      nuevos.forEach(a => {
+        if(idsYa.has(a.id)) a.id = uid();
+        D.alumnos.push(a);
+      });
+      normaliza(D);
+      guardar(); pintar();
+      toast(nuevos.length + ' alumnos añadidos');
+    }catch(e){ alert('Ese archivo no es una copia válida de Tatame.'); }
+  };
+  r.readAsText(file);
+}
+
 function importar(file){
   const r = new FileReader();
   r.onload = () => {
     try{
       const d = JSON.parse(r.result);
       if(!d || !Array.isArray(d.alumnos)) throw 0;
-      if(!confirm('Esto sustituye los datos actuales por los de la copia. ¿Seguir?')) return;
-      memoria = d; D = leer(); guardar(); pintar(); toast('Copia restaurada');
+      const cuantos = d.alumnos.length;
+      const ahora = D.alumnos.length;
+      if(!confirm(`La copia tiene ${cuantos} alumno${cuantos===1?'':'s'}.\n\n` +
+        (ahora ? `Sustituirá a los ${ahora} que hay ahora en el móvil. ` : '') +
+        '¿Seguir?')) return;
+      memoria = normaliza(d);
+      D = memoria;
+      guardar(); pintar();
+      toast(cuantos + ' alumnos restaurados');
     }catch(e){ alert('Ese archivo no es una copia válida de Tatame.'); }
   };
   r.readAsText(file);
