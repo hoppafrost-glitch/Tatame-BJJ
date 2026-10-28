@@ -15,6 +15,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).pathname.includes('/para-elena/')) return; // página aparte, no tocar caché de Tatame
   const esPagina = e.request.mode === 'navigate' || e.request.destination === 'document';
 
   // La página: primero la red, para que las versiones nuevas lleguen solas.
