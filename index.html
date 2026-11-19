@@ -344,9 +344,41 @@ function leer(){
   }
   return normaliza(memoria);
 }
+/* ---------- red de seguridad ----------
+   Una copia espejo en otra clave del móvil, que se refresca una vez
+   al día. No sustituye a la copia .json (si pierde el móvil, se va
+   con él), pero salva de un borrado por error o de un dato corrupto. */
+const CLAVE_BAK = 'tatame.v1.espejo';
+const CLAVE_COPIA = 'tatame.copia';
+
+function espejo(){
+  try{
+    if(!memoria.alumnos || !memoria.alumnos.length) return;   // nunca guardar vacío encima
+    const prev = JSON.parse(localStorage.getItem(CLAVE_BAK) || 'null');
+    if(prev && prev.fecha === hoyISO()) return;               // ya hay una de hoy
+    localStorage.setItem(CLAVE_BAK, JSON.stringify(
+      {fecha:hoyISO(), alumnos:memoria.alumnos.length, datos:memoria}));
+  }catch(e){}
+}
+function hayEspejo(){
+  try{
+    const e = JSON.parse(localStorage.getItem(CLAVE_BAK) || 'null');
+    return (e && e.datos && Array.isArray(e.datos.alumnos) && e.datos.alumnos.length) ? e : null;
+  }catch(e){ return null; }
+}
+function marcaCopia(){
+  try{ localStorage.setItem(CLAVE_COPIA, hoyISO()); }catch(e){}
+}
+function diasSinCopia(){
+  try{
+    const f = localStorage.getItem(CLAVE_COPIA);
+    return f ? dias(f) : null;
+  }catch(e){ return null; }
+}
+
 function guardar(){
   if(!persistente) return false;
-  try{ localStorage.setItem(CLAVE, JSON.stringify(memoria)); return true; }
+  try{ localStorage.setItem(CLAVE, JSON.stringify(memoria)); espejo(); return true; }
   catch(e){
     if(!guardar.avisado){
       guardar.avisado = true;
@@ -356,6 +388,7 @@ function guardar(){
   }
 }
 let D = leer();
+espejo();        // una copia espejo al día, también si hoy no edita nada
 
 /* ============================================================
    FECHAS Y CÁLCULOS
@@ -520,10 +553,30 @@ function vistaAvisos(){
       <div class="que">Aquí los datos no se guardan. Abre el archivo desde el móvil o desde tu web y sí se guardarán.</div>
       </div></div>`;
   }
+  const sinCopia = diasSinCopia();
+  if(D.alumnos.length && (sinCopia === null || sinCopia >= 14)){
+    h += `<div class="rescate" style="margin:0 0 14px">
+      <strong>Haz una copia</strong>
+      <p>${sinCopia === null
+        ? 'Todavía no has guardado ninguna copia de tus ' + D.alumnos.length + ' fichas.'
+        : 'Hace ' + sinCopia + ' días de la última copia.'}
+      Se manda por WhatsApp en dos toques y es lo único que las salva si pierdes el móvil.</p>
+      <button class="btn primario" id="copiaYa">Guardar copia ahora</button>
+    </div>`;
+  }
   h += `<div class="h2">Avisos <span class="n">${lista.length}</span></div>`;
   if(!lista.length){
     h += `<div class="vacio"><strong>Nada pendiente</strong>
       ${D.alumnos.length ? 'Ni cumpleaños ni hitos hoy.' : 'Añade al primer alumno con el botón +.'}</div>`;
+  }
+  const esp = !D.alumnos.length && hayEspejo();
+  if(esp){
+    h += `<div class="rescate" style="border-color:var(--alert)">
+      <strong style="color:var(--alert)">Falta tu gente</strong>
+      <p>La lista está vacía, pero en este móvil queda una copia del
+      ${fmt(esp.fecha)} con ${esp.datos.alumnos.length} alumnos. Puedes recuperarla ahora.</p>
+      <button class="btn primario" id="recuperarEspejo">Recuperar esos ${esp.datos.alumnos.length} alumnos</button>
+    </div>`;
   }
   if(!D.alumnos.length){
     h += `<div class="rescate">
@@ -639,7 +692,7 @@ function vistaAjustes(){
 
   <p class="nota-legal">Aquí hay datos personales de otras personas: pide su permiso, no metas nada
   que no necesites y guarda las copias en sitio seguro. Los menores necesitan permiso de padre, madre o tutor.</p>
-  <p class="nota-legal" style="text-align:center">Tatame · versión 20</p>`;
+  <p class="nota-legal" style="text-align:center">Tatame · versión 21</p>`;
 }
 
 function actualizaPrevia(){
@@ -721,31 +774,72 @@ const mmss = ms => {
 /* ---------- sonido ---------- */
 let ac = null, programados = [];
 
+let salida = null;
+
 function audio(){
   if(!ac){
     const AC = window.AudioContext || window.webkitAudioContext;
     if(!AC) return null;
     ac = new AC();
+    // Cadena de salida: compresor que aplasta el pico y sube el cuerpo,
+    // para que se oiga por encima del ruido del gimnasio.
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -24; comp.knee.value = 12;
+    comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.22;
+    salida = ac.createGain();
+    salida.gain.value = 3.2;
+    comp.connect(salida); salida.connect(ac.destination);
+    audio.entrada = comp;
   }
   if(ac.state === 'suspended') ac.resume();
   return ac;
+}
+function destino(){ return audio.entrada || ac.destination; }
+
+/* Ruido corto para el golpe del macillo sobre el metal */
+function golpe(c, t0, vol){
+  const n = Math.floor(c.sampleRate * 0.06);
+  const buf = c.createBuffer(1, n, c.sampleRate);
+  const dat = buf.getChannelData(0);
+  for(let i = 0; i < n; i++) dat[i] = (Math.random()*2-1) * Math.pow(1 - i/n, 2.6);
+  const src = c.createBufferSource(); src.buffer = buf;
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass';
+  bp.frequency.value = 2600; bp.Q.value = 0.8;
+  const g = c.createGain(); g.gain.value = vol;
+  src.connect(bp); bp.connect(g); g.connect(destino());
+  src.start(t0);
+  programados.push(src);
 }
 function silenciar(){
   programados.forEach(n => { try{ n.stop(0); }catch(e){} });
   programados = [];
 }
+/* Campana de ring: un metal golpeado no da notas de piano, da parciales
+   que no casan entre sí. De ahí las proporciones raras, y los pares
+   ligeramente desafinados que producen el batido metálico. */
+const PARCIALES = [
+  {r:1.00, v:1.00, d:3.4}, {r:1.00, v:0.90, d:3.4, det:+0.7},
+  {r:2.02, v:0.80, d:2.6}, {r:2.02, v:0.72, d:2.6, det:-1.1},
+  {r:2.78, v:0.62, d:2.0}, {r:3.76, v:0.52, d:1.5},
+  {r:5.12, v:0.36, d:1.0}, {r:6.81, v:0.24, d:0.7},
+  {r:8.44, v:0.15, d:0.45}
+];
+const BASE_HZ = 620;
+
 function campana(cuando, golpes){
   const c = audio(); if(!c) return;
   for(let g = 0; g < (golpes||1); g++){
-    const t0 = cuando + g*0.28;
-    [784, 1175, 1568, 2350].forEach((f,i) => {
+    const t0 = cuando + g*0.42;
+    golpe(c, t0, 0.55);                       // el macillo
+    PARCIALES.forEach(p => {
       const o = c.createOscillator(), vol = c.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(f, t0);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(BASE_HZ*p.r + (p.det||0), t0);
       vol.gain.setValueAtTime(0.0001, t0);
-      vol.gain.exponentialRampToValueAtTime(0.42/(i+1.4), t0+0.004);
-      vol.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.9 - i*0.25);
-      o.connect(vol); vol.connect(c.destination);
-      o.start(t0); o.stop(t0 + 2.1);
+      vol.gain.exponentialRampToValueAtTime(0.30*p.v, t0 + 0.003);
+      vol.gain.exponentialRampToValueAtTime(0.0001, t0 + p.d);
+      o.connect(vol); vol.connect(destino());
+      o.start(t0); o.stop(t0 + p.d + 0.1);
       programados.push(o);
     });
   }
@@ -753,12 +847,12 @@ function campana(cuando, golpes){
 function pitido(cuando, agudo){
   const c = audio(); if(!c) return;
   const o = c.createOscillator(), vol = c.createGain();
-  o.type = 'square'; o.frequency.setValueAtTime(agudo ? 1200 : 880, cuando);
+  o.type = 'square'; o.frequency.setValueAtTime(agudo ? 1320 : 990, cuando);
   vol.gain.setValueAtTime(0.0001, cuando);
-  vol.gain.exponentialRampToValueAtTime(0.16, cuando+0.008);
-  vol.gain.exponentialRampToValueAtTime(0.0001, cuando+0.13);
-  o.connect(vol); vol.connect(c.destination);
-  o.start(cuando); o.stop(cuando+0.16);
+  vol.gain.exponentialRampToValueAtTime(agudo ? 0.40 : 0.30, cuando+0.006);
+  vol.gain.exponentialRampToValueAtTime(0.0001, cuando + (agudo ? 0.22 : 0.15));
+  o.connect(vol); vol.connect(destino());
+  o.start(cuando); o.stop(cuando+0.26);
   programados.push(o);
 }
 
@@ -895,8 +989,15 @@ function refrescaReloj(){
   avance.style.strokeDashoffset = vuelta * (1 - parte);
   aro.className.baseVal = 'aro' + (fase === 'descanso' ? ' descanso' : (fase === 'prep' ? ' prep' : ''));
 
+  // Ojo: los mandos SOLO se repintan cuando cambia el estado. Si se
+  // redibujan en cada tick, el botón desaparece entre que lo tocas y
+  // lo sueltas, y el móvil se come la pulsación.
   const mandos = document.getElementById('mandos');
-  if(mandos) mandos.innerHTML = botonesReloj();
+  const firma = reloj.corriendo + '|' + reloj.fase;
+  if(mandos && mandos.dataset.firma !== firma){
+    mandos.dataset.firma = firma;
+    mandos.innerHTML = botonesReloj();
+  }
   const avisoSil = document.getElementById('avisoSilencio');
   if(avisoSil) avisoSil.hidden = reloj.fase === 'parado';
 }
@@ -1177,6 +1278,16 @@ document.getElementById('vista').addEventListener('click', e => {
   const f = e.target.closest('[data-filtro]');
   if(f){ filtro = f.dataset.filtro; pintar(); return; }
 
+  if(e.target.id === 'copiaYa') return exportarJSON();
+  if(e.target.id === 'recuperarEspejo'){
+    const esp = hayEspejo();
+    if(!esp) return;
+    if(!confirm('Se recuperan ' + esp.datos.alumnos.length + ' alumnos de la copia del ' +
+      fmt(esp.fecha) + '. ¿Seguir?')) return;
+    memoria = normaliza(esp.datos); D = memoria;
+    guardar(); pintar(); toast(D.alumnos.length + ' alumnos recuperados');
+    return;
+  }
   if(e.target.id === 'btnInstalar') return lanzarInstalacion();
   if(e.target.id === 'exp') return exportarJSON();
   if(e.target.id === 'expcsv') return exportarCSV();
@@ -1337,7 +1448,7 @@ async function bajar(nombre, texto, tipo){
 }
 async function exportarJSON(){
   const ok = await bajar('tatame-'+hoyISO()+'.json', JSON.stringify(D, null, 2), 'application/json');
-  if(ok) toast('Copia de ' + D.alumnos.length + ' alumnos');
+  if(ok){ marcaCopia(); toast('Copia de ' + D.alumnos.length + ' alumnos'); pintar(); }
 }
 function exportarCSV(){
   const cab = ['Nombre','Primer día','Meses entrenados','Meses de baja','Cinturón','Grados','Ficha','Situación','Teléfono','Nacimiento'];
