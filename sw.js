@@ -1,5 +1,5 @@
 /* Tatame · funciona sin cobertura y se actualiza sola */
-const CACHE = "tatame-v13";
+const CACHE = "tatame-v20";
 const ARCHIVOS = ['./', './index.html', './manifest.json',
   './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable.png', './logo.png'];
 

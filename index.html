@@ -185,6 +185,35 @@ nav .badge{font-family:var(--m);font-size:.62rem;background:var(--amber);color:#
   font-size:1.05rem;color:var(--amber);margin-bottom:6px}
 .rescate p{margin:0 0 13px;font-size:.88rem;color:var(--muted);line-height:1.45}
 
+/* ---------- temporizador de rondas ---------- */
+.reloj{display:flex;justify-content:center;margin:10px 0 18px}
+.caja-reloj{position:relative;display:grid;place-items:center}
+.aro{width:min(70vw,264px);height:min(70vw,264px);transform:rotate(-90deg);display:block}
+.aro .pista{fill:none;stroke:var(--line);stroke-width:7}
+.aro .avance{fill:none;stroke:var(--amber);stroke-width:7;stroke-linecap:round;
+  transition:stroke-dashoffset .15s linear}
+.aro.descanso .avance{stroke:var(--ok)}
+.aro.prep .avance{stroke:var(--alert)}
+.centro{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;padding:0 18px}
+.cuenta{font-family:var(--m);font-weight:600;font-size:3.3rem;line-height:1;
+  color:var(--canvas);font-variant-numeric:tabular-nums}
+.fase{font-family:var(--d);text-transform:uppercase;letter-spacing:.15em;
+  font-size:.95rem;color:var(--canvas);margin-top:9px}
+.ronda-n{font-family:var(--m);font-size:.72rem;color:var(--muted);margin-top:5px}
+.mandos{display:flex;gap:10px;margin-bottom:22px}
+.mandos .btn{flex:1}
+.opcion{margin-bottom:16px}
+.chips{display:flex;gap:7px}
+.chips button{flex:1;padding:12px 4px;border-radius:8px;border:1px solid var(--line);
+  background:var(--surface);color:var(--canvas);font-family:var(--d);
+  text-transform:uppercase;letter-spacing:.05em;font-size:.92rem}
+.chips button[aria-pressed="true"]{background:var(--canvas);color:var(--tatami);
+  border-color:var(--canvas);font-weight:700}
+.sonido-off{border-left:3px solid var(--amber);background:var(--surface);
+  border-radius:0 6px 6px 0;padding:11px 13px;font-size:.84rem;color:var(--muted);
+  line-height:1.45;margin-bottom:10px}
+
 /* ---------- escudo de fondo ---------- */
 #marca{
   position:fixed;left:50%;top:52%;transform:translate(-50%,-50%);
@@ -267,6 +296,7 @@ main{position:relative;z-index:1}
 <nav>
   <button data-tab="avisos" aria-current="true">Avisos <span class="badge" id="badge" hidden></span></button>
   <button data-tab="alumnos">Alumnos</button>
+  <button data-tab="rondas">Rondas</button>
   <button data-tab="ajustes">Ajustes</button>
 </nav>
 
@@ -473,7 +503,9 @@ function pintar(){
   document.getElementById('marca').style.display = (tab === 'avisos') ? 'block' : 'none';
   if(tab === 'avisos')  v.innerHTML = vistaAvisos();
   if(tab === 'alumnos') v.innerHTML = vistaAlumnos();
+  if(tab === 'rondas')  v.innerHTML = vistaRondas();
   if(tab === 'ajustes') v.innerHTML = vistaAjustes();
+  if(tab === 'rondas')  refrescaReloj();
   v.classList.remove('aparece'); void v.offsetWidth; v.classList.add('aparece');
 
   const activos = D.alumnos.filter(a=>a.estado!=='baja').length;
@@ -607,7 +639,7 @@ function vistaAjustes(){
 
   <p class="nota-legal">Aquí hay datos personales de otras personas: pide su permiso, no metas nada
   que no necesites y guarda las copias en sitio seguro. Los menores necesitan permiso de padre, madre o tutor.</p>
-  <p class="nota-legal" style="text-align:center">Tatame · versión 19</p>`;
+  <p class="nota-legal" style="text-align:center">Tatame · versión 20</p>`;
 }
 
 function actualizaPrevia(){
@@ -651,6 +683,269 @@ function selAnio(id, valor){
 function leeMes(idM, idA){
   return document.getElementById(idA).value + '-' +
     String(document.getElementById(idM).value).padStart(2,'0');
+}
+
+/* ============================================================
+   TEMPORIZADOR DE RONDAS
+   Vive en su propia clave de almacén (tatame.timer). No toca ni
+   lee 'tatame.v1', así que no puede afectar a las fichas.
+   Fases: preparados (5 s) -> ronda -> descanso -> ronda ...
+   Los últimos 5 segundos de cada espera van con pitido, y la
+   campana suena al empezar y al terminar cada ronda.
+   ============================================================ */
+const CLAVE_T = 'tatame.timer';
+const T_DEF = {ronda:300, descanso:15, rondas:5};
+
+function leeAjustesT(){
+  try{
+    const t = JSON.parse(localStorage.getItem(CLAVE_T) || 'null');
+    if(t && t.ronda) return Object.assign({}, T_DEF, t);
+  }catch(e){}
+  return Object.assign({}, T_DEF);
+}
+function guardaAjustesT(){
+  try{ localStorage.setItem(CLAVE_T, JSON.stringify(T)); }catch(e){}
+}
+let T = leeAjustesT();
+
+/* Estado en marcha (no se guarda: si cierra la app, se reinicia) */
+let reloj = {fase:'parado', ronda:1, finMs:0, restanteMs:0, corriendo:false, tick:null};
+
+const PREP = 5;                  // segundos de "preparados" antes de la 1ª ronda
+const dur = f => f === 'ronda' ? T.ronda : (f === 'descanso' ? T.descanso : PREP);
+const mmss = ms => {
+  const s = Math.max(0, Math.ceil(ms/1000));
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+};
+
+/* ---------- sonido ---------- */
+let ac = null, programados = [];
+
+function audio(){
+  if(!ac){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    ac = new AC();
+  }
+  if(ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function silenciar(){
+  programados.forEach(n => { try{ n.stop(0); }catch(e){} });
+  programados = [];
+}
+function campana(cuando, golpes){
+  const c = audio(); if(!c) return;
+  for(let g = 0; g < (golpes||1); g++){
+    const t0 = cuando + g*0.28;
+    [784, 1175, 1568, 2350].forEach((f,i) => {
+      const o = c.createOscillator(), vol = c.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(f, t0);
+      vol.gain.setValueAtTime(0.0001, t0);
+      vol.gain.exponentialRampToValueAtTime(0.42/(i+1.4), t0+0.004);
+      vol.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.9 - i*0.25);
+      o.connect(vol); vol.connect(c.destination);
+      o.start(t0); o.stop(t0 + 2.1);
+      programados.push(o);
+    });
+  }
+}
+function pitido(cuando, agudo){
+  const c = audio(); if(!c) return;
+  const o = c.createOscillator(), vol = c.createGain();
+  o.type = 'square'; o.frequency.setValueAtTime(agudo ? 1200 : 880, cuando);
+  vol.gain.setValueAtTime(0.0001, cuando);
+  vol.gain.exponentialRampToValueAtTime(0.16, cuando+0.008);
+  vol.gain.exponentialRampToValueAtTime(0.0001, cuando+0.13);
+  o.connect(vol); vol.connect(c.destination);
+  o.start(cuando); o.stop(cuando+0.16);
+  programados.push(o);
+}
+
+/* Programa de una vez los sonidos de la fase que empieza ahora:
+   así suenan aunque el móvil ralentice el JavaScript. */
+function programaFase(fase, segundos){
+  const c = audio(); if(!c) return;
+  const ahora = c.currentTime;
+  if(fase === 'ronda'){
+    campana(ahora + segundos, 2);          // fin de ronda: doble campanada
+  } else {
+    for(let s = Math.min(5, Math.floor(segundos)); s >= 1; s--)
+      pitido(ahora + segundos - s, s === 1);
+    campana(ahora + segundos, 1);          // empieza la ronda
+  }
+}
+
+/* ---------- pantalla encendida ---------- */
+let candado = null;
+async function mantenerPantalla(on){
+  try{
+    if(on && !candado && navigator.wakeLock){
+      candado = await navigator.wakeLock.request('screen');
+      candado.addEventListener('release', () => { candado = null; });
+    } else if(!on && candado){ candado.release(); candado = null; }
+  }catch(e){ candado = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && reloj.corriendo) mantenerPantalla(true);
+});
+
+/* ---------- motor ---------- */
+function arrancaFase(fase, ronda){
+  reloj.fase = fase;
+  reloj.ronda = ronda;
+  reloj.finMs = Date.now() + dur(fase)*1000;
+  programaFase(fase, dur(fase));
+}
+
+function paso(){
+  if(!reloj.corriendo) return;
+  let restante = reloj.finMs - Date.now();
+
+  while(restante <= 0 && reloj.corriendo){
+    const retraso = -restante;
+    if(reloj.fase === 'prep'){
+      arrancaFase('ronda', reloj.ronda);
+    } else if(reloj.fase === 'ronda'){
+      if(T.rondas && reloj.ronda >= T.rondas){ terminar(); return; }
+      arrancaFase('descanso', reloj.ronda);
+    } else {
+      arrancaFase('ronda', reloj.ronda + 1);
+    }
+    // si el móvil estuvo dormido y vamos con mucho retraso, recolocamos
+    reloj.finMs -= retraso > 1500 ? 0 : 0;
+    restante = reloj.finMs - Date.now();
+  }
+  refrescaReloj();
+}
+
+function empezar(){
+  audio();
+  silenciar();
+  reloj.corriendo = true;
+  arrancaFase('prep', 1);
+  clearInterval(reloj.tick);
+  reloj.tick = setInterval(paso, 120);
+  mantenerPantalla(true);
+  refrescaReloj();
+}
+function pausar(){
+  if(!reloj.corriendo) return;
+  reloj.restanteMs = reloj.finMs - Date.now();
+  reloj.corriendo = false;
+  clearInterval(reloj.tick); reloj.tick = null;
+  silenciar();
+  mantenerPantalla(false);
+  refrescaReloj();
+}
+function reanudar(){
+  const c = audio();
+  reloj.corriendo = true;
+  reloj.finMs = Date.now() + reloj.restanteMs;
+  if(c) programaFase(reloj.fase, reloj.restanteMs/1000);
+  clearInterval(reloj.tick);
+  reloj.tick = setInterval(paso, 120);
+  mantenerPantalla(true);
+  refrescaReloj();
+}
+function reiniciar(){
+  reloj.corriendo = false;
+  clearInterval(reloj.tick); reloj.tick = null;
+  silenciar();
+  mantenerPantalla(false);
+  reloj = {fase:'parado', ronda:1, finMs:0, restanteMs:0, corriendo:false, tick:null};
+  refrescaReloj();
+}
+function terminar(){
+  reloj.corriendo = false;
+  clearInterval(reloj.tick); reloj.tick = null;
+  silenciar();
+  const c = audio();
+  if(c) campana(c.currentTime + 0.02, 3);   // fin del entrenamiento: tres campanadas
+  mantenerPantalla(false);
+  reloj.fase = 'fin';
+  refrescaReloj();
+}
+
+/* ---------- pintado del reloj ---------- */
+const ETIQUETA = {prep:'Preparados', ronda:'Ronda', descanso:'Descanso',
+                  parado:'Listo', fin:'Entrenamiento terminado'};
+
+function refrescaReloj(){
+  const cuenta = document.getElementById('cuenta');
+  if(!cuenta) return;                       // no estamos en la pestaña
+  const fase = reloj.fase;
+  const total = (fase === 'parado' || fase === 'fin') ? T.ronda : dur(fase);
+  const restante = (fase === 'parado') ? T.ronda*1000
+                 : (fase === 'fin') ? 0
+                 : (reloj.corriendo ? reloj.finMs - Date.now() : reloj.restanteMs);
+
+  cuenta.textContent = mmss(restante);
+  document.getElementById('fase').textContent = ETIQUETA[fase] || '';
+  const sub = document.getElementById('ronda-n');
+  sub.textContent = (fase === 'parado' || fase === 'fin')
+    ? (T.rondas ? T.rondas + ' rondas de ' + Math.round(T.ronda/60) + ' min' : 'rondas sin fin')
+    : 'Ronda ' + reloj.ronda + (T.rondas ? ' de ' + T.rondas : '');
+
+  const aro = document.getElementById('aro');
+  const avance = document.getElementById('avance');
+  const vuelta = 2*Math.PI*52;
+  const parte = total ? Math.max(0, Math.min(1, restante/(total*1000))) : 0;
+  avance.style.strokeDasharray = vuelta;
+  avance.style.strokeDashoffset = vuelta * (1 - parte);
+  aro.className.baseVal = 'aro' + (fase === 'descanso' ? ' descanso' : (fase === 'prep' ? ' prep' : ''));
+
+  const mandos = document.getElementById('mandos');
+  if(mandos) mandos.innerHTML = botonesReloj();
+  const avisoSil = document.getElementById('avisoSilencio');
+  if(avisoSil) avisoSil.hidden = reloj.fase === 'parado';
+}
+
+function botonesReloj(){
+  if(reloj.corriendo)
+    return `<button class="btn" id="tPausa">Pausa</button>
+            <button class="btn contorno" id="tReset">Reiniciar</button>`;
+  if(reloj.fase === 'parado' || reloj.fase === 'fin')
+    return `<button class="btn primario" id="tStart">Empezar</button>`;
+  return `<button class="btn primario" id="tSigue">Seguir</button>
+          <button class="btn contorno" id="tReset">Reiniciar</button>`;
+}
+
+function chips(id, opciones, valor){
+  return `<div class="chips">` + opciones.map(o =>
+    `<button data-${id}="${o.v}" aria-pressed="${o.v == valor}">${o.t}</button>`).join('') + `</div>`;
+}
+
+function vistaRondas(){
+  const vuelta = 2*Math.PI*52;
+  return `
+  <div class="reloj">
+    <div class="caja-reloj">
+      <svg id="aro" class="aro" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="pista" cx="60" cy="60" r="52"></circle>
+        <circle id="avance" class="avance" cx="60" cy="60" r="52"
+          style="stroke-dasharray:${vuelta};stroke-dashoffset:0"></circle>
+      </svg>
+      <div class="centro">
+        <div class="cuenta" id="cuenta">00:00</div>
+        <div class="fase" id="fase"></div>
+        <div class="ronda-n" id="ronda-n"></div>
+      </div>
+    </div>
+  </div>
+  <div class="mandos" id="mandos">${botonesReloj()}</div>
+
+  <div class="opcion"><label>Duración de la ronda</label>
+    ${chips('ronda', [{v:180,t:'3 min'},{v:240,t:'4 min'},{v:300,t:'5 min'},{v:360,t:'6 min'}], T.ronda)}</div>
+  <div class="opcion"><label>Descanso entre rondas</label>
+    ${chips('descanso', [{v:10,t:'10 s'},{v:15,t:'15 s'},{v:30,t:'30 s'},{v:60,t:'60 s'}], T.descanso)}</div>
+  <div class="opcion"><label>Número de rondas</label>
+    ${chips('rondas', [{v:3,t:'3'},{v:5,t:'5'},{v:8,t:'8'},{v:10,t:'10'},{v:0,t:'∞'}], T.rondas)}</div>
+
+  <div class="sonido-off" id="avisoSilencio" hidden>
+    Si no se oye la campana, sube el volumen y quita el modo silencio:
+    el iPhone calla a las webs cuando está en silencio. Deja la app abierta y la pantalla encendida.
+  </div>`;
 }
 
 /* ============================================================
@@ -849,6 +1144,23 @@ document.querySelector('nav').addEventListener('click', e => {
 document.getElementById('fab').addEventListener('click', () => abrirFicha(null));
 
 document.getElementById('vista').addEventListener('click', e => {
+  if(tab === 'rondas'){
+    const t = e.target;
+    if(t.id === 'tStart') return empezar();
+    if(t.id === 'tPausa') return pausar();
+    if(t.id === 'tSigue') return reanudar();
+    if(t.id === 'tReset') return reiniciar();
+    const op = t.closest('[data-ronda],[data-descanso],[data-rondas]');
+    if(op){
+      if(op.dataset.ronda !== undefined)    T.ronda    = +op.dataset.ronda;
+      if(op.dataset.descanso !== undefined) T.descanso = +op.dataset.descanso;
+      if(op.dataset.rondas !== undefined)   T.rondas   = +op.dataset.rondas;
+      guardaAjustesT();
+      if(reloj.corriendo || reloj.fase !== 'parado') reiniciar();
+      pintar();
+      return;
+    }
+  }
   const tach = e.target.closest('[data-tachar]');
   if(tach){
     D.vistos = D.vistos || [];
