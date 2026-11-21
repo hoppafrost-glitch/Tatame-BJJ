@@ -376,6 +376,22 @@ function diasSinCopia(){
   }catch(e){ return null; }
 }
 
+/* Cartel de copia: a pantalla completa cada 10 días. El "ahora no"
+   solo calla una semana... un día. Al siguiente vuelve. */
+const DIAS_COPIA = 10;
+function tocaCopia(){
+  if(!D.alumnos.length) return false;
+  const d = diasSinCopia();
+  if(d !== null && d < DIAS_COPIA) return false;
+  try{
+    if(localStorage.getItem(CLAVE_COPIA+'.luego') === hoyISO()) return false;
+  }catch(e){}
+  return true;
+}
+function luegoCopia(){
+  try{ localStorage.setItem(CLAVE_COPIA+'.luego', hoyISO()); }catch(e){}
+}
+
 function guardar(){
   if(!persistente) return false;
   try{ localStorage.setItem(CLAVE, JSON.stringify(memoria)); espejo(); return true; }
@@ -554,7 +570,7 @@ function vistaAvisos(){
       </div></div>`;
   }
   const sinCopia = diasSinCopia();
-  if(D.alumnos.length && (sinCopia === null || sinCopia >= 14)){
+  if(D.alumnos.length && (sinCopia === null || sinCopia >= DIAS_COPIA)){
     h += `<div class="rescate" style="margin:0 0 14px">
       <strong>Haz una copia</strong>
       <p>${sinCopia === null
@@ -692,7 +708,7 @@ function vistaAjustes(){
 
   <p class="nota-legal">Aquí hay datos personales de otras personas: pide su permiso, no metas nada
   que no necesites y guarda las copias en sitio seguro. Los menores necesitan permiso de padre, madre o tutor.</p>
-  <p class="nota-legal" style="text-align:center">Tatame · versión 24</p>`;
+  <p class="nota-legal" style="text-align:center">Tatame · versión 26</p>`;
 }
 
 function actualizaPrevia(){
@@ -762,7 +778,7 @@ function guardaAjustesT(){
 let T = leeAjustesT();
 
 /* Estado en marcha (no se guarda: si cierra la app, se reinicia) */
-let reloj = {fase:'parado', ronda:1, finMs:0, restanteMs:0, corriendo:false, tick:null};
+let reloj = {fase:'parado', ronda:1, restanteMs:0, corriendo:false, tick:null, plan:null, durTramo:0};
 
 const PREP = 5;                  // segundos de "preparados" antes de la 1ª ronda
 const dur = f => f === 'ronda' ? T.ronda : (f === 'descanso' ? T.descanso : PREP);
@@ -859,18 +875,81 @@ function pitido(cuando, agudo){
   programados.push(o);
 }
 
-/* Programa de una vez los sonidos de la fase que empieza ahora:
-   así suenan aunque el móvil ralentice el JavaScript. */
-function programaFase(fase, segundos){
-  const c = audio(); if(!c) return;
-  const ahora = c.currentTime;
-  if(fase === 'ronda'){
-    campana(ahora + segundos, 3);          // fin de ronda: tres clines
-  } else {
-    for(let s = Math.min(5, Math.floor(segundos)); s >= 1; s--)
-      pitido(ahora + segundos - s, s === 1);
-    campana(ahora + segundos, 2);          // empieza la ronda: dos clines
+/* ============================================================
+   EL PLAN
+   iOS congela el JavaScript en cuanto sales de la app. Por eso el
+   temporizador no puede depender de ir despertando fase a fase: se
+   calcula de golpe TODO el entrenamiento, con tiempos absolutos, y
+   los sonidos se encolan de una vez en el hilo de audio, que sí
+   sigue corriendo con la app de fondo. El reloj de pantalla no
+   manda nada: solo mira el plan y pinta lo que toca.
+   ============================================================ */
+const HORIZONTE = 60*60*1000;      // no planificar más de una hora por delante
+
+function construyePlan(t0, faseIni, rondaIni, durIni){
+  const plan = [];
+  let t = t0, fase = faseIni, ronda = rondaIni, d = durIni;
+  while(t - t0 < HORIZONTE){
+    plan.push({fase, ronda, ini:t, fin:t + d*1000});
+    t += d*1000;
+    if(fase === 'prep'){ fase = 'ronda'; d = T.ronda; }
+    else if(fase === 'ronda'){
+      if(T.rondas && ronda >= T.rondas){
+        plan.push({fase:'fin', ronda, ini:t, fin:t + 3600000});
+        break;
+      }
+      fase = 'descanso'; d = T.descanso;
+    }
+    else { fase = 'ronda'; ronda++; d = T.ronda; }
   }
+  return plan;
+}
+
+/* Encola en el hilo de audio los sonidos de todo el plan. Esto es lo
+   que hace que las campanas suenen aunque esté en WhatsApp. */
+function programaPlan(){
+  const c = audio(); if(!c || !reloj.plan) return;
+  silenciar();
+  const ahora = Date.now();
+  const base = c.currentTime;
+  reloj.plan.forEach((seg, i) => {
+    const t = base + (seg.fin - ahora)/1000;      // cuándo acaba el tramo
+    if(seg.fase === 'fin' || t < base) return;    // ya pasó: ni tocarlo
+    if(seg.fase === 'ronda'){
+      const ultima = !reloj.plan[i+1] || reloj.plan[i+1].fase === 'fin';
+      campana(t, ultima ? 5 : 3);                 // fin de ronda, o del entrenamiento
+    } else {
+      for(let s = 5; s >= 1; s--){
+        const tp = t - s;
+        if(tp > base - 0.02) pitido(tp, s === 1); // cuenta atrás
+      }
+      campana(t, 2);                              // empieza la ronda
+    }
+  });
+}
+
+/* ---------- que iOS no corte el audio al minimizar ----------
+   Mientras suena un <audio> en bucle, el sistema mantiene viva la
+   sesión de audio de la página y el AudioContext no se suspende.
+   El archivo es silencio puro, no se oye nada. */
+const SILENCIO = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAHgAACUgAHx8fJiYmLi4uNjY2Nj4+PkVFRU1NTU1VVVVdXV1kZGRkbGxsdHR0fHx8fIODg4uLi5OTk5Obm5uioqKqqqqqsrKyurq6wcHBwcnJydHR0dnZ2dng4ODo6Ojw8PDw+Pj4////AAAAAExhdmM2MC4zMQAAAAAAAAAAAAAAACQCwAAAAAAAAAlIKLOsHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/+MYxAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxDsAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxHYAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxLEAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxMQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+let vivo = null;
+
+function mantenerAudio(on){
+  try{
+    if(on){
+      if(!vivo){
+        vivo = new Audio(SILENCIO);
+        vivo.loop = true;
+        vivo.volume = 0.001;
+        vivo.setAttribute('playsinline','');
+      }
+      const p = vivo.play();
+      if(p && p.catch) p.catch(()=>{});
+    } else if(vivo){
+      vivo.pause();
+    }
+  }catch(e){}
 }
 
 /* ---------- pantalla encendida ---------- */
@@ -883,99 +962,129 @@ async function mantenerPantalla(on){
     } else if(!on && candado){ candado.release(); candado = null; }
   }catch(e){ candado = null; }
 }
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible' && reloj.corriendo) mantenerPantalla(true);
-});
+
+/* ---------- dónde estamos ahora ---------- */
+function tramoActual(){
+  if(!reloj.plan || !reloj.plan.length) return null;
+  const ahora = Date.now();
+  const ultimo = reloj.plan[reloj.plan.length-1];
+
+  // Rondas sin fin: el plan solo llega hasta el horizonte, así que
+  // cuando se acaba se construye el siguiente tramo desde donde toca.
+  if(ultimo.fase !== 'fin' && ahora > ultimo.fin - 10*60*1000){
+    const seg = reloj.plan.find(s => ahora < s.fin) || ultimo;
+    reloj.plan = construyePlan(seg.ini, seg.fase, seg.ronda, (seg.fin-seg.ini)/1000);
+    programaPlan();
+  }
+  for(const seg of reloj.plan)
+    if(ahora < seg.fin) return seg;
+  return reloj.plan[reloj.plan.length-1] || null;
+}
 
 /* ---------- motor ---------- */
-function arrancaFase(fase, ronda){
-  reloj.fase = fase;
-  reloj.ronda = ronda;
-  reloj.finMs = Date.now() + dur(fase)*1000;
-  programaFase(fase, dur(fase));
-}
-
-function paso(){
-  if(!reloj.corriendo) return;
-  let restante = reloj.finMs - Date.now();
-
-  while(restante <= 0 && reloj.corriendo){
-    const retraso = -restante;
-    if(reloj.fase === 'prep'){
-      arrancaFase('ronda', reloj.ronda);
-    } else if(reloj.fase === 'ronda'){
-      if(T.rondas && reloj.ronda >= T.rondas){ terminar(); return; }
-      arrancaFase('descanso', reloj.ronda);
-    } else {
-      arrancaFase('ronda', reloj.ronda + 1);
-    }
-    // si el móvil estuvo dormido y vamos con mucho retraso, recolocamos
-    reloj.finMs -= retraso > 1500 ? 0 : 0;
-    restante = reloj.finMs - Date.now();
-  }
-  refrescaReloj();
-}
-
 function empezar(){
-  audio();
+  const c = audio();
   silenciar();
   reloj.corriendo = true;
-  arrancaFase('prep', 1);
+  reloj.plan = construyePlan(Date.now(), 'prep', 1, PREP);
+  programaPlan();
+  mantenerAudio(true);
   clearInterval(reloj.tick);
-  reloj.tick = setInterval(paso, 120);
+  reloj.tick = setInterval(refrescaReloj, 120);
   mantenerPantalla(true);
   refrescaReloj();
 }
+
 function pausar(){
   if(!reloj.corriendo) return;
-  reloj.restanteMs = reloj.finMs - Date.now();
+  const seg = tramoActual();
+  reloj.fase = seg ? seg.fase : 'parado';
+  reloj.ronda = seg ? seg.ronda : 1;
+  reloj.restanteMs = seg ? Math.max(0, seg.fin - Date.now()) : 0;
   reloj.corriendo = false;
+  reloj.plan = null;
   clearInterval(reloj.tick); reloj.tick = null;
   silenciar();
+  mantenerAudio(false);
   mantenerPantalla(false);
   refrescaReloj();
 }
+
 function reanudar(){
-  const c = audio();
+  audio();
   reloj.corriendo = true;
-  reloj.finMs = Date.now() + reloj.restanteMs;
-  if(c) programaFase(reloj.fase, reloj.restanteMs/1000);
+  reloj.plan = construyePlan(Date.now(), reloj.fase, reloj.ronda, reloj.restanteMs/1000);
+  programaPlan();
+  mantenerAudio(true);
   clearInterval(reloj.tick);
-  reloj.tick = setInterval(paso, 120);
+  reloj.tick = setInterval(refrescaReloj, 120);
   mantenerPantalla(true);
   refrescaReloj();
 }
+
 function reiniciar(){
-  reloj.corriendo = false;
-  clearInterval(reloj.tick); reloj.tick = null;
+  clearInterval(reloj.tick);
   silenciar();
+  mantenerAudio(false);
   mantenerPantalla(false);
-  reloj = {fase:'parado', ronda:1, finMs:0, restanteMs:0, corriendo:false, tick:null};
+  reloj = {fase:'parado', ronda:1, restanteMs:0, corriendo:false, tick:null, plan:null};
   refrescaReloj();
 }
+
 function terminar(){
   reloj.corriendo = false;
+  reloj.plan = null;
   clearInterval(reloj.tick); reloj.tick = null;
-  silenciar();
-  const c = audio();
-  if(c) campana(c.currentTime + 0.02, 5);   // fin del entrenamiento: tanda larga de cinco
+  mantenerAudio(false);
   mantenerPantalla(false);
   reloj.fase = 'fin';
   refrescaReloj();
 }
+
+/* Al volver de WhatsApp: el plan ya tenía los tiempos buenos, así que
+   solo hay que repintar y reponer lo que iOS se lleva al suspender.
+   Los sonidos NO se reprograman si ya estaban encolados y sonando. */
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState !== 'visible') return;
+  if(!reloj.corriendo) return;
+  mantenerPantalla(true);
+  mantenerAudio(true);
+  // iOS puede haber matado el tick mientras estaba de fondo: lo repongo
+  clearInterval(reloj.tick);
+  reloj.tick = setInterval(refrescaReloj, 120);
+  const c = ac;
+  if(c && c.state === 'suspended'){
+    // iOS cortó el audio pese a todo: lo reanudamos y reencolamos
+    c.resume().then(programaPlan).catch(()=>{});
+  }
+  refrescaReloj();
+});
 
 /* ---------- pintado del reloj ---------- */
 const ETIQUETA = {prep:'Preparados', ronda:'Ronda', descanso:'Descanso',
                   parado:'Listo', fin:'Entrenamiento terminado'};
 
 function refrescaReloj(){
+  // Si corre, la verdad está en el plan, no en variables que el móvil
+  // pudo dejar congeladas: así volver de WhatsApp cuadra siempre.
+  if(reloj.corriendo){
+    const seg = tramoActual();
+    if(seg){
+      if(seg.fase === 'fin'){ terminar(); return; }
+      reloj.fase = seg.fase;
+      reloj.ronda = seg.ronda;
+      reloj.restanteMs = Math.max(0, seg.fin - Date.now());
+      reloj.durTramo = (seg.fin - seg.ini)/1000;
+    }
+  }
   const cuenta = document.getElementById('cuenta');
   if(!cuenta) return;                       // no estamos en la pestaña
   const fase = reloj.fase;
-  const total = (fase === 'parado' || fase === 'fin') ? T.ronda : dur(fase);
+  const total = (fase === 'parado' || fase === 'fin') ? T.ronda
+              : (reloj.corriendo && reloj.durTramo ? reloj.durTramo : dur(fase));
   const restante = (fase === 'parado') ? T.ronda*1000
                  : (fase === 'fin') ? 0
-                 : (reloj.corriendo ? reloj.finMs - Date.now() : reloj.restanteMs);
+                 : reloj.restanteMs;
 
   cuenta.textContent = mmss(restante);
   document.getElementById('fase').textContent = ETIQUETA[fase] || '';
@@ -1049,8 +1158,8 @@ function vistaRondas(){
   <button class="btn contorno" id="tProbar" style="margin-bottom:14px">Probar la campana</button>
 
   <div class="sonido-off" id="avisoSilencio" hidden>
-    Si no se oye la campana, sube el volumen y quita el modo silencio:
-    el iPhone calla a las webs cuando está en silencio. Deja la app abierta y la pantalla encendida.
+    Puedes salir de la app o bloquear el móvil: las campanas siguen sonando.
+    Si no se oyen, sube el volumen y quita el modo silencio, que el iPhone calla a las webs.
   </div>`;
 }
 
@@ -1583,6 +1692,36 @@ function verCartelInstalar(){
   document.body.style.overflow = 'hidden';
 }
 
+function verCartelCopia(){
+  const c = document.getElementById('instala');
+  const d = diasSinCopia();
+  c.innerHTML = `<div class="caja">
+    ${faixaHTML('negro',3,true)}
+    <h2 id="instala-t">Toca copia de seguridad</h2>
+    <p class="lead">${d === null
+      ? 'Nunca has guardado una copia de tus ' + D.alumnos.length + ' fichas.'
+      : 'Hace ' + d + ' días de la última copia, y tienes ' + D.alumnos.length + ' fichas.'}</p>
+    <ol>
+      <li><span>Pulsa el botón de abajo.</span></li>
+      <li><span>Se abre el menú de compartir del iPhone.</span></li>
+      <li><span>Elige <b>Guardar en Archivos → iCloud Drive</b>, o mándatelo por WhatsApp.</span></li>
+    </ol>
+    <div class="ojo">Todo vive en este móvil. Si se pierde o se rompe, esa copia es lo único
+      que devuelve las fichas, las fotos y las notas.</div>
+    <button class="btn primario" id="copiaAhora">Guardar la copia</button>
+    <p style="text-align:center;margin:12px 0 0"><button id="copiaLuego"
+      style="color:var(--muted);font-size:.85rem;text-decoration:underline">Ahora no</button></p>
+  </div>`;
+  c.classList.add('ver');
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarCartelCopia(){
+  const c = document.getElementById('instala');
+  c.classList.remove('ver'); c.innerHTML = '';
+  document.body.style.overflow = '';
+}
+
 function cerrarCartel(){
   document.getElementById('instala').classList.remove('ver');
   document.getElementById('instala').innerHTML = '';
@@ -1591,6 +1730,12 @@ function cerrarCartel(){
 }
 
 document.getElementById('instala').addEventListener('click', e => {
+  if(e.target.id === 'copiaAhora'){
+    cerrarCartelCopia();
+    exportarJSON();
+    return;
+  }
+  if(e.target.id === 'copiaLuego'){ luegoCopia(); return cerrarCartelCopia(); }
   if(e.target.closest('[data-cerrar-instala]')) return cerrarCartel();
   if(e.target.id === 'copiarLink'){
     const t = location.href;
@@ -1604,6 +1749,9 @@ try{ cartelVisto = localStorage.getItem(CLAVE+'.visto') === '1'; }catch(e){}
 if(esIOS && !yaInstalada()) document.getElementById('instalar').hidden = false;
 if(esIOS && !yaInstalada() && !cartelVisto && location.protocol.startsWith('http')){
   setTimeout(verCartelInstalar, 700);
+} else if(tocaCopia()){
+  // el cartel de instalar manda; si no toca, el de la copia
+  setTimeout(verCartelCopia, 900);
 }
 
 /* ============================================================
